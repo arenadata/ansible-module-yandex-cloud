@@ -72,7 +72,7 @@ options:
         required: false
     disk_size:
         description:
-            - primary disk size in GB, default 10GB. 
+            - primary disk size in GB, default 10GB.
         required: false
     secondary_disks_spec:
         description:
@@ -139,7 +139,7 @@ EXAMPLES = '''
     metadata:
         user-data:
     state: present
-    
+
 - name: Stop vm
   ycc_vm:
     name: my_tyni_vm
@@ -163,22 +163,27 @@ message:
     returned: always
 '''
 
-VMS_STATES = ['present', 'absent', 'update']
-VMS_OPERATIONS = ['start', 'stop', 'get_info']
+VMS_STATES = ['present', 'absent', ]
+VMS_OPERATIONS = ['start', 'stop', 'get_info', 'update']
 ZONE_IDS = ['ru-central1-a', 'ru-central1-b', 'ru-central1-c']
 PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']  # standard-v1, standard-v2
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ['hdd', 'nvme'] # network-nvme, network-hdd
 
+from copy import deepcopy
 from enum import Enum
+from json import dumps
 
 from ansible.module_utils.yc import YC
 from google.protobuf.json_format import MessageToDict
-from yandex.cloud.compute.v1.instance_pb2 import (IPV4, Instance,
-                                                  SchedulingPolicy)
+from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
+from yandex.cloud.compute.v1.disk_service_pb2_grpc import DiskServiceStub
+from yandex.cloud.compute.v1.instance_pb2 import IPV4, SchedulingPolicy
 from yandex.cloud.compute.v1.instance_service_pb2 import (
-    AttachedDiskSpec, CreateInstanceMetadata, CreateInstanceRequest,
-    NetworkInterfaceSpec, OneToOneNatSpec, PrimaryAddressSpec, ResourcesSpec)
+    AttachedDiskSpec, CreateInstanceRequest, DeleteInstanceRequest,
+    ListInstancesRequest, NetworkInterfaceSpec, OneToOneNatSpec,
+    PrimaryAddressSpec, ResourcesSpec, StartInstanceRequest,
+    StopInstanceRequest)
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import \
     InstanceServiceStub
 
@@ -190,53 +195,93 @@ def vm_argument_spec():
         login=dict(type='str', required=False),
         public_ssh_key=dict(type='str', required=False),
         hostname=dict(type='str', required=False),
-        zone_id=dict(type='str', choices=ZONE_IDS, required=False),
-        platform_id=dict(type='str', choices=PLATFORM_IDS, required=False),
-        core_fraction=dict(type='int', choices=CORE_FRACTIONS, required=False),
+        zone_id=dict(type='str', choices=ZONE_IDS, required=False, default='ru-central1-a'),
+        platform_id=dict(type='str', choices=PLATFORM_IDS, required=False, default='Intel Broadwell'),
+        core_fraction=dict(type='int', choices=CORE_FRACTIONS, required=False, default=100),
         cores=dict(type='int', required=False, default=2),
         memory=dict(type='int', required=False, default=2),
-        image_id=dict(type='str', required=True),
-        disk_type=dict(choices=DISK_TYPES, required=False),
+        image_id=dict(type='str', required=False),
+        disk_type=dict(choices=DISK_TYPES, required=False, default='hdd'),
         disk_size=dict(type='int', required=False, default=10),
         secondary_disks_spec=dict(type='list', required=False),
-        subnet_id=dict(type='int', required=False),
+        subnet_id=dict(type='str', required=False),
         assign_public_ip=dict(type='bool', required=False, default=False),
         preemptible=dict(type='bool', required=False, default=False),
         metadata=dict(type='dict', required=False),
         state=dict(choices=VMS_STATES, required=False),
         operation=dict(choices=VMS_OPERATIONS, required=False))
 
-MUTUALLY_EXCLUSIVE = [['state', 'operation']]
+MUTUALLY_EXCLUSIVE = [['state', 'operation'], ['login', 'metadata'], ['metadata', 'public_ssh_key']]
+REQUIRED_TOGETHER = [['login', 'public_ssh_key']]
+REQUIRED_IF = [['state', 'present', ['image_id', 'subnet_id']]]
 
 class YccVM(YC):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.instance_service = self.sdk.client(InstanceServiceStub)
+        self.disk_service = self.sdk.client(DiskServiceStub)
 
-    def manage_states(self):
-        state = self.params.get('state')
-        if state == "present":
-            return self.add_vm()
+    def _list_by_name(self, name, folder_id):
+        instances = self.instance_service.List(ListInstancesRequest(
+            folder_id=folder_id,
+            filter='name="%s"' % name
+        ))
+        return MessageToDict(instances)
 
-        if state == "absent":
-            return self.delete_vm()
+    def _get_instance(self, name, folder_id):
+        instance = self._list_by_name(name, folder_id)
+        if instance:
+            return instance['instances'][0]
+        return instance
 
-        if state == "update":
-            return self.update_vm()
+    def _compare_disk(self, disk_id, disk_spec):
+        err = list()
+        disk = MessageToDict(self.disk_service.Get(GetDiskRequest(
+            disk_id=disk_id)))
+        if getattr(DiskType, disk_spec['disk_type'].upper()).value == disk['typeId']:
+            err.append('disk_type')
 
-    def manage_operations(self):
-        operation = self.params.get('operation')
+        if disk_spec['disk_size'] * 2**30 == disk['size']:
+            err.append('disk_size')
 
-        if operation == "start":
-            return self.start_vm()
+        if disk_spec.get('image_id') and disk_spec['image_id'] == disk['sourceImageId']:
+            err.append('image_id')
 
-        if operation == "stop":
-            return self.stop_vm()
+        return err
 
-        if operation == "get_info":
-            return self.get_info()
+    def _is_same(self, instance: dict, spec: dict):
+        err = list()
 
-    def add_vm(self):
+        err.extend(
+            [k for k, v in spec.items()
+             if k in ['folder_id', 'name', 'zone_id', 'platform_id', 'hostname']
+             and not instance[_camel(k)] == v])
+        err.extend(
+            [k for k, v in spec.items()
+             if k in ['memory', 'cores', 'core_fraction']
+             and not instance['resources'][_camel(k)] == v])
+        if instance['networkInterfaces'][0]['subnetId'] == spec['subnetId']:
+            err.append('subnet_id')
+        if instance.get('schedulingPolicy', {}).get('preemptible') == spec['preemptible']:
+            err.append('preemptible')
+
+        err.extend(self._compare_disk(instance['bootDisk']['diskId'], spec))
+
+        for idx, disk in enumerate(instance['secondaryDisks']):
+            fault_keys=list()
+            if spec['secondary_disks_spec'][idx].get('autodelete', True) != disk['autoDelete']:
+                fault_keys.append('autodelete')
+            fault_keys.extend(self._compare_disk(disk['diskId'], spec['secondary_disks_spec'][idx]))
+            if fault_keys:
+                err.append(dumps({'param_key': 'secondary_disks_spec',
+                                  'index:': idx,
+                                  'fault_keys': fault_keys
+                                  }))
+
+        return err
+
+    def _get_instance_params(self):
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
         login = self.params.get('login')
@@ -256,40 +301,22 @@ class YccVM(YC):
         preemptible = self.params.get('preemptible')
         metadata = self.params.get('metadata')
 
-        instance_service = self.sdk.client(InstanceServiceStub)
-
-        params=dict(
+        params = dict(
             folder_id=folder_id,
             name=name,
-            resources_spec=ResourcesSpec(
-                memory=memory * 2**30,
-                cores=cores,
-                core_fraction=core_fraction),
+            resources_spec=_get_resource_spec(memory, cores, core_fraction),
             zone_id=zone_id,
-            platform_id=getattr(Platform_id, ''.join(platform_id.split())).value,
-            boot_disk_spec=AttachedDiskSpec(
-                auto_delete=True,
-                disk_spec=AttachedDiskSpec.DiskSpec(
-                    type_id=getattr(Disk_type, disk_type.upper()).value,
-                    size=disk_size * 2 ** 30,
-                    image_id=image_id)),
-            network_interface_specs=[
-                NetworkInterfaceSpec(
-                    subnet_id=subnet_id)
-            ],
+            platform_id=_get_platform_id(platform_id),
+            boot_disk_spec=_get_attached_disk_spec(disk_type, disk_size, image_id),
+            network_interface_specs=_get_network_interface_spec(subnet_id, assign_public_ip)
         )
 
+        if secondary_disks_spec:
+            params['secondary_disk_specs'] = _get_secondary_disk_specs(secondary_disks_spec)
         if hostname:
             params['hostname'] = hostname
         if preemptible:
-            params['scheduling_policy'] = SchedulingPolicy(preemptible=preemptible)
-        if secondary_disks_spec:
-            pass
-        if assign_public_ip:
-            params['network_interface_specs'][0].primary_v4_address_spec.CopyFrom(PrimaryAddressSpec(  # pylint: disable=no-member
-                one_to_one_nat_spec=OneToOneNatSpec(
-                    ip_version=IPV4
-                )))
+            params['scheduling_policy'] = _get_scheduling_policy(preemptible)
         if metadata:
             params['metadata'] = metadata
 
@@ -299,38 +326,199 @@ class YccVM(YC):
             datasource: { Ec2: { strict_id: false, ssh_pwauth: "no" } }
             users: [{ name: "%s", sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", ssh-authorized-keys: ["%s"] }]
             """ % (login, public_ssh_key)}
+        return params
 
-        operation = instance_service.Create(CreateInstanceRequest(**params))
-        responce = self.sdk.waiter(operation.id).operation.response
-        responce['json'] = MessageToDict(responce)
-        return responce
+    def manage_states(self):
+        state = self.params.get('state')
+        if state == "present":
+            return self.add_vm()
+
+        if state == "absent":
+            return self.delete_vm()
+
+    def manage_operations(self):
+        operation = self.params.get('operation')
+
+        if operation == "start":
+            return self.start_vm()
+
+        if operation == "stop":
+            return self.stop_vm()
+
+        if operation == "get_info":
+            return self.get_info()
+
+        if operation == "update":
+            return self.update_vm()
+
+    def add_vm(self):
+        spec = deepcopy(self.params)
+        response = dict()
+        response['changed'] = False
+        name = self.params.get('name')
+        folder_id = self.params.get('folder_id')
+
+        instance = self._get_instance(name, folder_id)
+        if instance:
+            compare_result = self._is_same(instance, spec)
+            if compare_result:
+                response['failed'] = True
+                response['msg'] = "Instance already exits and %s"\
+                                  " request params are different" % ', '.join(compare_result)
+        else:
+            params = self._get_instance_params()
+
+            operation = self.instance_service.Create(CreateInstanceRequest(**params))
+            cloud_response = self.waiter(operation)
+
+            response['response'] = MessageToDict(
+                cloud_response)
+            response['changed'] = True
+        return response
 
     def delete_vm(self):
-        pass
+        response = dict()
+        response['changed'] = False
+        name = self.params.get('name')
+        folder_id = self.params.get('folder_id')
+        instance = self._get_instance(name, folder_id)
+        if instance:
+            operation = self.instance_service.Delete(DeleteInstanceRequest(
+                instance_id=instance['id']
+            ))
+            cloud_response = self.waiter(operation)
+
+            response['response'] = MessageToDict(
+                cloud_response)
+            response['changed'] = True
+        return response
 
     def update_vm(self):
         pass
 
     def start_vm(self):
-        pass
+        response = dict()
+        response['changed'] = False
+        folder_id = self.params.get('folder_id')
+        name = self.params.get('name')
+        instance = self._get_instance(name, folder_id)
+        if instance:
+            if instance['STATUS'] == 'STOPPED':
+                operation = self.instance_service.Start(StartInstanceRequest(
+                    instance_id=instance['id']
+                ))
+                cloud_response = self.waiter(operation)
+
+                response['response'] = MessageToDict(
+                    cloud_response)
+                response['changed'] = True
+            elif instance['STATUS'] != 'RUNNING':
+                response['failed'] = True
+                response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['STATUS']
+        else:
+            response['failed'] = True
+            response['msg'] = 'Instance with such name(%s) doesn`t exist' % name
+
+        return response
 
     def stop_vm(self):
-        pass
+        response = dict()
+        response['changed'] = False
+        folder_id = self.params.get('folder_id')
+        name = self.params.get('name')
+        instance = self._get_instance(name, folder_id)
+        if instance:
+            if instance['STATUS'] == 'RUNNING':
+                operation = self.instance_service.Stop(StopInstanceRequest(
+                    instance_id=instance['id']
+                ))
+                cloud_response = self.waiter(operation)
+
+                response['response'] = MessageToDict(
+                    cloud_response)
+                response['changed'] = True
+            elif instance['STATUS'] != 'STOPPED':
+                response['failed'] = True
+                response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['STATUS']
+        else:
+            response['failed'] = True
+            response['msg'] = 'Instance with such name(%s) doesn`t exist' % name
 
     def get_info(self):
-        pass
+        response = dict()
+        name = self.params.get('name')
+        folder_id = self.params.get('folder_id')
+        instance = self._get_instance(name, folder_id)
+        if instance:
+            response['instance'] = instance
+        return response
 
-class Platform_id(Enum):
-    IntelBroadwell = 'standard-v1'  
+
+class PlatformId(Enum):
+    IntelBroadwell = 'standard-v1'
     IntelCascadeLake = 'standard-v2'
 
-class Disk_type(Enum):
+
+class DiskType(Enum):
     HDD = 'network-hdd'
     NVME = 'network-nvme'
 
 
+def _camel(snake_case):
+    first, *others = snake_case.split('_')
+    return ''.join([first.lower(), *map(str.title, others)])
+
+
+def _get_attached_disk_spec(disk_type, disk_size, image_id):
+    return AttachedDiskSpec(
+        auto_delete=True,
+        disk_spec=AttachedDiskSpec.DiskSpec(
+            type_id=getattr(DiskType, disk_type.upper()).value,
+            size=disk_size * 2 ** 30,
+            image_id=image_id))
+
+def _get_secondary_disk_specs(secondary_disks):
+    return list(map(
+        lambda disk: AttachedDiskSpec(    
+            auto_delete=disk.get('autodelete', True),
+            disk_spec=AttachedDiskSpec.DiskSpec(
+                description=disk.get('description'),
+                type_id=getattr(DiskType, secondary_disks['disk_type'].upper()).value,
+                size=secondary_disks['disk_size'] * 2 ** 30
+                )
+        ),
+        secondary_disks))
+
+def _get_resource_spec(memory, cores, core_fraction):
+    return ResourcesSpec(
+        memory=memory * 2**30,
+        cores=cores,
+        core_fraction=core_fraction)
+
+
+def _get_platform_id(platform_id):
+    return getattr(PlatformId, ''.join(platform_id.split())).value
+
+
+def _get_network_interface_spec(subnet_id, assign_public_ip):
+    net_spec = [
+        NetworkInterfaceSpec(
+            subnet_id=subnet_id,
+            primary_v4_address_spec=PrimaryAddressSpec())]
+    if assign_public_ip:
+        net_spec[0].primary_v4_address_spec.one_to_one_nat_spec.CopyFrom(  # pylint: disable=no-member
+            OneToOneNatSpec(
+                ip_version=IPV4
+            ))
+    return net_spec
+
+
+def _get_scheduling_policy(preemptible):
+    return SchedulingPolicy(preemptible=preemptible)
+
+
 def main():
-    argument_spec=vm_argument_spec()
+    argument_spec = vm_argument_spec()
     result = dict(
         changed=False,
         original_message='',
@@ -339,9 +527,11 @@ def main():
     module = YccVM(
         argument_spec=argument_spec,
         mutually_exclusive=MUTUALLY_EXCLUSIVE,
+        required_together=REQUIRED_TOGETHER,
+        required_if=REQUIRED_IF,
         supports_check_mode=True
     )
-
+    response = dict()
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
     # state with no modifications
