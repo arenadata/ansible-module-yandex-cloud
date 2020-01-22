@@ -1,8 +1,15 @@
 #!/usr/bin/python
-
-# Copyright: (c) 2020, Rotaru Sergey <rsv@arenadata.io>
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 ANSIBLE_METADATA = {
     'metadata_version': '1.1',
     'status': ['preview'],
@@ -166,9 +173,9 @@ message:
 VMS_STATES = ['present', 'absent', ]
 VMS_OPERATIONS = ['start', 'stop', 'get_info', 'update']
 ZONE_IDS = ['ru-central1-a', 'ru-central1-b', 'ru-central1-c']
-PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']  # standard-v1, standard-v2
+PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']
 CORE_FRACTIONS = [5, 20, 50, 100]
-DISK_TYPES = ['hdd', 'nvme'] # network-nvme, network-hdd
+DISK_TYPES = ['hdd', 'nvme']
 
 from copy import deepcopy
 from enum import Enum
@@ -311,7 +318,7 @@ class YccVM(YC):
             network_interface_specs=_get_network_interface_spec(subnet_id, assign_public_ip)
         )
 
-        if secondary_disks_spec:
+        if secondary_disks_spec and secondary_disks_spec[0]:
             params['secondary_disk_specs'] = _get_secondary_disk_specs(secondary_disks_spec)
         if hostname:
             params['hostname'] = hostname
@@ -403,7 +410,7 @@ class YccVM(YC):
         name = self.params.get('name')
         instance = self._get_instance(name, folder_id)
         if instance:
-            if instance['STATUS'] == 'STOPPED':
+            if instance['status'] == 'STOPPED':
                 operation = self.instance_service.Start(StartInstanceRequest(
                     instance_id=instance['id']
                 ))
@@ -412,9 +419,9 @@ class YccVM(YC):
                 response['response'] = MessageToDict(
                     cloud_response)
                 response['changed'] = True
-            elif instance['STATUS'] != 'RUNNING':
+            elif instance['status'] != 'RUNNING':
                 response['failed'] = True
-                response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['STATUS']
+                response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['status']
         else:
             response['failed'] = True
             response['msg'] = 'Instance with such name(%s) doesn`t exist' % name
@@ -428,7 +435,7 @@ class YccVM(YC):
         name = self.params.get('name')
         instance = self._get_instance(name, folder_id)
         if instance:
-            if instance['STATUS'] == 'RUNNING':
+            if instance['status'] == 'RUNNING':
                 operation = self.instance_service.Stop(StopInstanceRequest(
                     instance_id=instance['id']
                 ))
@@ -437,12 +444,14 @@ class YccVM(YC):
                 response['response'] = MessageToDict(
                     cloud_response)
                 response['changed'] = True
-            elif instance['STATUS'] != 'STOPPED':
+            elif instance['status'] != 'STOPPED':
                 response['failed'] = True
-                response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['STATUS']
+                response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['status']
         else:
             response['failed'] = True
             response['msg'] = 'Instance with such name(%s) doesn`t exist' % name
+
+        return response
 
     def get_info(self):
         response = dict()
@@ -451,6 +460,9 @@ class YccVM(YC):
         instance = self._get_instance(name, folder_id)
         if instance:
             response['instance'] = instance
+        else:
+            response['msg'] = 'No instance found'
+
         return response
 
 
@@ -528,15 +540,12 @@ def main():
         argument_spec=argument_spec,
         mutually_exclusive=MUTUALLY_EXCLUSIVE,
         required_together=REQUIRED_TOGETHER,
-        required_if=REQUIRED_IF,
-        supports_check_mode=True
+        required_if=REQUIRED_IF
     )
     response = dict()
     # if the user is working with this module in only check mode we do not
     # want to make any changes to the environment, just return the current
     # state with no modifications
-    if module.check_mode:
-        module.exit_json(**result)
 
     try:
         if module.params.get('state'):
