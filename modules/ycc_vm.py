@@ -203,7 +203,8 @@ def vm_argument_spec():
         public_ssh_key=dict(type='str', required=False),
         hostname=dict(type='str', required=False),
         zone_id=dict(type='str', choices=ZONE_IDS, required=False, default='ru-central1-a'),
-        platform_id=dict(type='str', choices=PLATFORM_IDS, required=False, default='Intel Broadwell'),
+        platform_id=dict(type='str', choices=PLATFORM_IDS,
+                         required=False, default='Intel Broadwell'),
         core_fraction=dict(type='int', choices=CORE_FRACTIONS, required=False, default=100),
         cores=dict(type='int', required=False, default=2),
         memory=dict(type='int', required=False, default=2),
@@ -218,7 +219,9 @@ def vm_argument_spec():
         state=dict(choices=VMS_STATES, required=False),
         operation=dict(choices=VMS_OPERATIONS, required=False))
 
-MUTUALLY_EXCLUSIVE = [['state', 'operation'], ['login', 'metadata'], ['metadata', 'public_ssh_key']]
+MUTUALLY_EXCLUSIVE = [['state', 'operation'],
+                      ['login', 'metadata'],
+                      ['metadata', 'public_ssh_key']]
 REQUIRED_TOGETHER = [['login', 'public_ssh_key']]
 REQUIRED_IF = [['state', 'present', ['image_id', 'subnet_id']]]
 
@@ -279,7 +282,8 @@ class YccVM(YC):
             fault_keys=list()
             if spec['secondary_disks_spec'][idx].get('autodelete', True) != disk['autoDelete']:
                 fault_keys.append('autodelete')
-            fault_keys.extend(self._compare_disk(disk['diskId'], spec['secondary_disks_spec'][idx]))
+            fault_keys.extend(self._compare_disk(disk['diskId'],
+                                                 spec['secondary_disks_spec'][idx]))
             if fault_keys:
                 err.append(dumps({'param_key': 'secondary_disks_spec',
                                   'index:': idx,
@@ -328,11 +332,15 @@ class YccVM(YC):
             params['metadata'] = metadata
 
         if login and public_ssh_key:
-            params['metadata'] = {"user-data": """
-            #cloud-config
-            datasource: { Ec2: { strict_id: false, ssh_pwauth: "no" } }
-            users: [{ name: "%s", sudo: "ALL=(ALL) NOPASSWD:ALL", shell: "/bin/bash", ssh-authorized-keys: ["%s"] }]
-            """ % (login, public_ssh_key)}
+            params['metadata'] = {
+                "user-data": ("#cloud-config\n"
+                              "datasource: { Ec2: { strict_id: false, ssh_pwauth: \"no\" } }\n"
+                              "users: [{\n"
+                              "   name: \"%s\",\n"
+                              "   sudo: \"ALL=(ALL) NOPASSWD:ALL\",\n"
+                              "   shell: \"/bin/bash\",\n"
+                              "   ssh-authorized-keys: [\"%s\"]\n"
+                              "}]") % (login, public_ssh_key)}
         return params
 
     def manage_states(self):
