@@ -180,9 +180,11 @@ DISK_TYPES = ['hdd', 'nvme']
 from copy import deepcopy
 from enum import Enum
 from json import dumps
+from time import sleep
 
 from ansible.module_utils.yc import YC
 from google.protobuf.json_format import MessageToDict
+from grpc._channel import _InactiveRpcError
 from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
 from yandex.cloud.compute.v1.disk_service_pb2_grpc import DiskServiceStub
 from yandex.cloud.compute.v1.instance_pb2 import IPV4, SchedulingPolicy
@@ -217,7 +219,9 @@ def vm_argument_spec():
         preemptible=dict(type='bool', required=False, default=False),
         metadata=dict(type='dict', required=False),
         state=dict(choices=VMS_STATES, required=False),
-        operation=dict(choices=VMS_OPERATIONS, required=False))
+        operation=dict(choices=VMS_OPERATIONS, required=False),
+        max_retries = dict(type='int', required=False, default=5),
+        retry_multiplayer = dict(type='int', required=False, default=2))
 
 MUTUALLY_EXCLUSIVE = [['state', 'operation'],
                       ['login', 'metadata'],
@@ -372,6 +376,8 @@ class YccVM(YC):
         response['changed'] = False
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
+        max_retries = self.params.get('max_retries')
+        retry_multiplayer = self.params.get('retry_multiplayer')
 
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -383,7 +389,16 @@ class YccVM(YC):
         else:
             params = self._get_instance_params()
 
-            operation = self.instance_service.Create(CreateInstanceRequest(**params))
+            for counter in range(max_retries):
+                try:
+                    operation = self.instance_service.Create(CreateInstanceRequest(**params))
+                    break
+                except _InactiveRpcError as err:
+                    counter += 1
+                    sleep(retry_multiplayer*counter)
+                    if counter == max_retries:
+                        raise err
+
             cloud_response = self.waiter(operation)
 
             response['response'] = MessageToDict(
@@ -564,7 +579,12 @@ def main():
             raise Exception('One of the state/operation should be provided.')
 
     except Exception as error:
-        response['msg'] = error
+        if hasattr(error, 'details'):
+            response['msg'] = getattr(error, 'details')()
+            response['exception'] = error
+        else:
+            response['msg'] = 'Error duating runtime ocurred'
+            response['exception'] = error
         module.fail_json(**response)
 
     module.exit_json(**response)

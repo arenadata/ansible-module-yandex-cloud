@@ -30,7 +30,7 @@ class YC(AnsibleModule):
         kwargs['argument_spec'] = argument_spec
 
         super().__init__(*args, **kwargs)
-        interceptor = RetryInterceptor(max_retry_count=5, retriable_codes=[grpc.StatusCode.UNAVAILABLE])
+        interceptor = RetryInterceptor(max_retry_count=10)
         self.sdk = SDK(interceptor=interceptor, token=self.params.get('token'))
 
     def waiter(self, operation):
