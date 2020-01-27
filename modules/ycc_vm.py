@@ -182,7 +182,7 @@ from enum import Enum
 from json import dumps
 from time import sleep
 
-from ansible.module_utils.yc import YC
+from ansible.module_utils.yc import YC, response_error_check
 from google.protobuf.json_format import MessageToDict
 from grpc._channel import _InactiveRpcError
 from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
@@ -400,10 +400,9 @@ class YccVM(YC):
                         raise err
 
             cloud_response = self.waiter(operation)
-
             response['response'] = MessageToDict(
                 cloud_response)
-            response['changed'] = True
+            response = response_error_check(response)
         return response
 
     def delete_vm(self):
@@ -420,7 +419,7 @@ class YccVM(YC):
 
             response['response'] = MessageToDict(
                 cloud_response)
-            response['changed'] = True
+            response = response_error_check(response)
         return response
 
     def update_vm(self):
@@ -441,7 +440,7 @@ class YccVM(YC):
 
                 response['response'] = MessageToDict(
                     cloud_response)
-                response['changed'] = True
+                response = response_error_check(response)
             elif instance['status'] != 'RUNNING':
                 response['failed'] = True
                 response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['status']
@@ -466,7 +465,7 @@ class YccVM(YC):
 
                 response['response'] = MessageToDict(
                     cloud_response)
-                response['changed'] = True
+                response = response_error_check(response)
             elif instance['status'] != 'STOPPED':
                 response['failed'] = True
                 response['msg'] = 'Current instance status(%s) doens`t allow start action' % instance['status']

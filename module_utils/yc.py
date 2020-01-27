@@ -38,3 +38,12 @@ class YC(AnsibleModule):
         for _ in waiter:
             sleep(1)
         return waiter.operation
+
+
+def response_error_check(response):
+    if response['response'].get('error'):
+        response['failed'] = True
+        response['changed'] = False
+    else:
+        response['changed'] = False
+    return response
