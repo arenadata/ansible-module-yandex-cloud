@@ -45,5 +45,5 @@ def response_error_check(response):
         response['failed'] = True
         response['changed'] = False
     else:
-        response['changed'] = False
+        response['changed'] = True
     return response
