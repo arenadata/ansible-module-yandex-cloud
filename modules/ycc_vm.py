@@ -177,6 +177,7 @@ PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ['hdd', 'nvme']
 
+import traceback
 from copy import deepcopy
 from enum import Enum
 from json import dumps
@@ -580,10 +581,10 @@ def main():
     except Exception as error:
         if hasattr(error, 'details'):
             response['msg'] = getattr(error, 'details')()
-            response['exception'] = error
+            response['exception'] = traceback.format_exc()
         else:
             response['msg'] = 'Error duating runtime ocurred'
-            response['exception'] = error
+            response['exception'] = traceback.format_exc()
         module.fail_json(**response)
 
     module.exit_json(**response)
