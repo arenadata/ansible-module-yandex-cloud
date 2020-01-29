@@ -297,6 +297,21 @@ class YccVM(YC):
 
         return err
 
+    def _retry(self, func, params, msg_builder=None):
+        for counter in range(self.params.get('max_retries')):
+            try:
+                if msg_builder:
+                    operation = func(msg_builder(**params))
+                else:
+                    operation = func(params)
+                break
+            except _InactiveRpcError as err:
+                counter += 1
+                sleep(self.params.get('retry_multiplayer')*counter)
+                if counter == self.params.get('max_retries'):
+                    raise err
+        return operation
+
     def _get_instance_params(self):
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
@@ -377,8 +392,6 @@ class YccVM(YC):
         response['changed'] = False
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
-        max_retries = self.params.get('max_retries')
-        retry_multiplayer = self.params.get('retry_multiplayer')
 
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -390,17 +403,9 @@ class YccVM(YC):
         else:
             params = self._get_instance_params()
 
-            for counter in range(max_retries):
-                try:
-                    operation = self.instance_service.Create(CreateInstanceRequest(**params))
-                    break
-                except _InactiveRpcError as err:
-                    counter += 1
-                    sleep(retry_multiplayer*counter)
-                    if counter == max_retries:
-                        raise err
-
-            cloud_response = self.waiter(operation)
+            operation = self._retry(self.instance_service.Create, params, CreateInstanceRequest)
+        
+            cloud_response = self._retry(self.waiter, operation)
             response['response'] = MessageToDict(
                 cloud_response)
             response = response_error_check(response)
