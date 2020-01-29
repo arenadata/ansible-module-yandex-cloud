@@ -1,4 +1,5 @@
 #!/usr/bin/python
+
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -10,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 ANSIBLE_METADATA = {
     'metadata_version': '1.1',
     'status': ['preview'],
@@ -25,89 +27,165 @@ description:
     - "Ansible module to manage (create/update/delete) virtial machines in Yandex compute cloud"
 
 options:
+    token:
+        description:
+            - Oauth token to access cloud.
+        type: str
+        required: true
     name:
         description:
-            - virtual machine name - must be unique throw all folders of cloud
+            - Virtual machine name - must be unique throw all folders of cloud.
+        type: str
         required: true
     folder_id:
         description:
-            - virtual machine target folder id.
+            - Virtual machine target folder id.
+        type: str
         required: true
     login:
         description:
-            - user to create on virtual machine, required for linux instances
+            - User to create on virtual machine, required for linux instances.
+            - Required together with I(public_ssh_key).
+            - Required with I(state=present), mutually exclusive with I(metadata).
+        type: str
         required: false
     public_ssh_key:
         description:
-            - created user`s openssh public key
+            - Created user`s openssh public key.
+            - Required together with I(public_ssh_key).
+            - Required with I(state=present), mutually exclusive with I(metadata).
+        type: str
         required: false
-    password:
-        description:
-            - system administrator password, required for windows instances
-        required: false
+    # password:
+    #     description:
+    #         - System administrator password, required for windows instances.
+    #     required: false
     hostname:
         description:
-            - virtual machine hostname, default same as name
+            - Virtual machine hostname, default same as name.
+        type: str
         required: false
     zone_id:
         description:
-            - availability zone id. Default ru-central1-a
+            - Availability zone id.
+        type: str
         required: false
+        default: ru-central1-a
+        choises:
+            - ru-central1-a
+            - ru-central1-b
+            - ru-central1-c
     platform_id:
         description:
-            - Default Intel Broadwell.
+            - Platform id.
+        default: Intel Broadwell.
+        type: str
         required: false
+        choises:
+            - Intel Cascade Lake
+            - Intel Broadwell
     core_fraction:
         description:
-            - Guaranteed vCPU share, default 100%
+            - Guaranteed vCPU share
+        type: int
+        default: 100
         required: false
+        choises:
+            - 5
+            - 20
+            - 50
+            - 100
     cores:
         description:
-            - vCPU number, default 2.
+            - vCPU number.
+        type: int
+        default: 2
         required: false
     memory:
         description:
-            - RAM size, default 2 GB.
+            - RAM size, GB.
+        type: int
+        default: 2
         required: false
     image_id:
         description:
-            - boot image id.
-        required: true
+            - Boot image id.
+            - Required with I(state=present).
+        type: str
+        required: false
     disk_type:
         description:
-            - primary disk type, default hdd
+            - Primary disk type.
+        default: hdd
+        type: str
         required: false
+        choises:
+            - hdd
+            - nvme
     disk_size:
         description:
-            - primary disk size in GB, default 10GB.
+            - Primary disk size in GB.
+        type: int
+        default: 10
         required: false
     secondary_disks_spec:
         description:
-            - additional disk configuration spec.
+            - Additional disk configuration spec.
+        type: list
         required: false
     subnet_id:
         description:
-            - network id.
-        required: required
+            - Network id.
+            - Required with I(state=present)
+        required: false
     assign_public_ip:
         description:
-            - assign public address, default false.
+            - Assign public address.
+        type: bool
+        default: false
         required: false
     preemptible:
         description:
-            - create preemtible(may be stopped after working 24h a row) vm.
+            - Create preemtible(may be stopped after working 24h a row) vm.
+        type: bool
+        default: false
         required: false
     metadata:
         description:
-            - metadata to be translate to vm.
+            - Metadata to be translate to vm.
+        type: dict
         required: false
     state:
         description:
-            - present or absent. Default present.
+            - VM state.
+            - Mutually exclusive with I(operation).
+        choices:
+            - present
+            - absent
+        type: str
         required: false
     operation:
         description:
-            - stop, start or get_info. Mutually exclusive with state parameter.
+            - stop, start or get_info.
+            - Mutually exclusive with I(state).
+        choises:
+            - start
+            - stop
+            - get_info
+            - update            
+        required: false
+    max_retries:
+        description:
+            - Max retries to proceed operation/state.
+        type: int
+        default: 5
+        required: false
+    retry_multiplayer:
+        description:
+            - Retry multiplayer between retries to proceed operation/state 
+            - (wait retry_multiplayer*curent_retry seconds)
+        type: int
+        default: 2
         required: false
 
 author:
@@ -118,6 +196,7 @@ author:
 EXAMPLES = '''
 - name: Create vm
   ycc_vm:
+    token: {{ my_token }}
     name: my_vm
     login: john_doe
     public_ssh_key: john_doe_public_key
@@ -144,16 +223,18 @@ EXAMPLES = '''
     assign_public_ip: false
     preemptible: true
     metadata:
-        user-data:
+        user-data: "cloud init format in str"
     state: present
 
 - name: Stop vm
   ycc_vm:
+    token: {{ my_token }}
     name: my_tyni_vm
     operation: stop
 
 - name: Start vm
   ycc_vm:
+    token: {{ my_token }}
     name: my_tyni_vm
     operation: start
 
@@ -183,6 +264,7 @@ from enum import Enum
 from json import dumps
 from time import sleep
 
+from ansible.module_utils.common.validation import check_mutually_exclusive
 from ansible.module_utils.yc import YC, response_error_check
 from google.protobuf.json_format import MessageToDict
 from grpc._channel import _InactiveRpcError
@@ -316,7 +398,8 @@ class YccVM(YC):
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
         login = self.params.get('login')
-        hostname = self.params.get('hostname')
+        hostname = self.params.get('hostname') if self.params.get('hostname') \
+            else self.params.get('name')
         public_ssh_key = self.params.get('public_ssh_key')
         zone_id = self.params.get('zone_id')
         platform_id = self.params.get('platform_id')

@@ -9,6 +9,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import os
 from time import sleep
 
@@ -21,7 +22,6 @@ def yc_argument_spec():
     return dict(
         token=dict(type='str', required=False, default=os.environ.get('yc_token'))
     )
-
 
 class YC(AnsibleModule):
     def __init__(self, *args, **kwargs):
