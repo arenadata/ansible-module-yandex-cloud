@@ -671,7 +671,7 @@ def main():
             response['msg'] = getattr(error, 'details')()
             response['exception'] = traceback.format_exc()
         else:
-            response['msg'] = 'Error duating runtime ocurred'
+            response['msg'] = 'Error during runtime ocurred'
             response['exception'] = traceback.format_exc()
         module.fail_json(**response)
 
