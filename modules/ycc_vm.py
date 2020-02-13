@@ -352,7 +352,7 @@ class YccVM(YC):
 
         err.extend(
             [k for k, v in spec.items()
-             if k in ['folder_id', 'name', 'zone_id', 'platform_id', 'hostname']
+             if k in ['folder_id', 'name', 'zone_id', 'platform_id']
              and not instance[_camel(k)] == v])
         err.extend(
             [k for k, v in spec.items()
