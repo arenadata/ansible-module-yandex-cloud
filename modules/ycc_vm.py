@@ -358,24 +358,29 @@ class YccVM(YC):
             [k for k, v in spec.items()
              if k in ['memory', 'cores', 'core_fraction']
              and not instance['resources'][_camel(k)] == v])
-        if instance['networkInterfaces'][0]['subnetId'] == spec['subnetId']:
+        if instance['networkInterfaces'][0]['subnetId'] == spec['subnet_id']:
             err.append('subnet_id')
         if instance.get('schedulingPolicy', {}).get('preemptible') == spec['preemptible']:
             err.append('preemptible')
 
         err.extend(self._compare_disk(instance['bootDisk']['diskId'], spec))
 
-        for idx, disk in enumerate(instance['secondaryDisks']):
-            fault_keys=list()
-            if spec['secondary_disks_spec'][idx].get('autodelete', True) != disk['autoDelete']:
-                fault_keys.append('autodelete')
-            fault_keys.extend(self._compare_disk(disk['diskId'],
-                                                 spec['secondary_disks_spec'][idx]))
-            if fault_keys:
-                err.append(dumps({'param_key': 'secondary_disks_spec',
-                                  'index:': idx,
-                                  'fault_keys': fault_keys
-                                  }))
+        if spec.get('secondary_disks_spec') and not instance.get('secondaryDisks'):
+            err.extend('secondary_disk not presented on instance')
+        elif not spec.get('secondary_disks_spec') and instance.get('secondaryDisks'):
+            err.extend('secondary_disk presented on instance but not described in module call')
+        elif spec.get('secondary_disks_spec') and instance.get('secondaryDisks'):
+            for idx, disk in enumerate(instance['secondaryDisks']):
+                fault_keys = list()
+                if spec['secondary_disks_spec'][idx].get('autodelete', True) != disk['autoDelete']:
+                    fault_keys.append('autodelete')
+                fault_keys.extend(self._compare_disk(disk['diskId'],
+                                                     spec['secondary_disks_spec'][idx]))
+                if fault_keys:
+                    err.append(dumps({'param_key': 'secondary_disks_spec',
+                                      'index:': idx,
+                                      'fault_keys': fault_keys
+                                      }))
 
         return err
 
