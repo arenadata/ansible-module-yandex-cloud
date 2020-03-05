@@ -253,19 +253,19 @@ message:
 
 VMS_STATES = ['present', 'absent', ]
 VMS_OPERATIONS = ['start', 'stop', 'get_info', 'update']
-ZONE_IDS = ['ru-central1-a', 'ru-central1-b', 'ru-central1-c']
 PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ['hdd', 'nvme']
 
+
+# pylint: disable=wrong-import-position
 import traceback
 from copy import deepcopy
 from enum import Enum
 from json import dumps
 from time import sleep
 
-from ansible.module_utils.common.validation import check_mutually_exclusive
-from ansible.module_utils.yc import YC, response_error_check
+from ansible.module_utils.yc import YC, ZONE_IDS, response_error_check
 from google.protobuf.json_format import MessageToDict
 from grpc._channel import _InactiveRpcError
 from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
@@ -303,8 +303,8 @@ def vm_argument_spec():
         metadata=dict(type='dict', required=False),
         state=dict(choices=VMS_STATES, required=False),
         operation=dict(choices=VMS_OPERATIONS, required=False),
-        max_retries = dict(type='int', required=False, default=5),
-        retry_multiplayer = dict(type='int', required=False, default=2))
+        max_retries=dict(type='int', required=False, default=5),
+        retry_multiplayer=dict(type='int', required=False, default=2))
 
 MUTUALLY_EXCLUSIVE = [['state', 'operation'],
                       ['login', 'metadata'],
@@ -492,7 +492,7 @@ class YccVM(YC):
             params = self._get_instance_params()
 
             operation = self._retry(self.instance_service.Create, params, CreateInstanceRequest)
-        
+
             cloud_response = self._retry(self.waiter, operation)
             response['response'] = MessageToDict(
                 cloud_response)
@@ -607,7 +607,7 @@ def _get_attached_disk_spec(disk_type, disk_size, image_id):
 
 def _get_secondary_disk_specs(secondary_disks):
     return list(map(
-        lambda disk: AttachedDiskSpec(    
+        lambda disk: AttachedDiskSpec(
             auto_delete=disk.get('autodelete', True),
             disk_spec=AttachedDiskSpec.DiskSpec(
                 description=disk.get('description'),
@@ -647,11 +647,6 @@ def _get_scheduling_policy(preemptible):
 
 def main():
     argument_spec = vm_argument_spec()
-    result = dict(
-        changed=False,
-        original_message='',
-        message=''
-    )
     module = YccVM(
         argument_spec=argument_spec,
         mutually_exclusive=MUTUALLY_EXCLUSIVE,
@@ -671,7 +666,7 @@ def main():
         else:
             raise Exception('One of the state/operation should be provided.')
 
-    except Exception as error:
+    except Exception as error:  # pylint: disable=broad-except
         if hasattr(error, 'details'):
             response['msg'] = getattr(error, 'details')()
             response['exception'] = traceback.format_exc()

@@ -13,10 +13,10 @@
 import os
 from time import sleep
 
-import grpc
 from ansible.module_utils.basic import AnsibleModule
 from yandexcloud import SDK, RetryInterceptor
 
+ZONE_IDS = ['ru-central1-a', 'ru-central1-b', 'ru-central1-c']
 
 def yc_argument_spec():
     return dict(
