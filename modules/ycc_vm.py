@@ -336,13 +336,13 @@ class YccVM(YC):
         err = list()
         disk = MessageToDict(self.disk_service.Get(GetDiskRequest(
             disk_id=disk_id)))
-        if getattr(DiskType, disk_spec['disk_type'].upper()).value == disk['typeId']:
-            err.append('disk_type')
+        if disk_spec['type'] != disk['typeId']:
+            err.append('type')
 
-        if disk_spec['disk_size'] * 2**30 == disk['size']:
-            err.append('disk_size')
+        if str(disk_spec['size']) != disk['size']:
+            err.append('size')
 
-        if disk_spec.get('image_id') and disk_spec['image_id'] == disk['sourceImageId']:
+        if disk_spec.get('image_id') and disk_spec['image_id'] != disk['sourceImageId']:
             err.append('image_id')
 
         return err
@@ -357,13 +357,18 @@ class YccVM(YC):
         err.extend(
             [k for k, v in spec.items()
              if k in ['memory', 'cores', 'core_fraction']
-             and not instance['resources'][_camel(k)] == v])
-        if instance['networkInterfaces'][0]['subnetId'] == spec['subnet_id']:
+             and not instance['resources'][_camel(k)] == str(v)])
+
+        if instance['networkInterfaces'][0]['subnetId'] != spec['subnet_id']:
             err.append('subnet_id')
-        if instance.get('schedulingPolicy', {}).get('preemptible') == spec['preemptible']:
+        if instance.get('schedulingPolicy', {}).get('preemptible', False) != spec['preemptible']:
             err.append('preemptible')
 
-        err.extend(self._compare_disk(instance['bootDisk']['diskId'], spec))
+        # prepare boot_disk_spec
+        boot_disk_spec = {'type': spec['disk_type'],
+                          'size': spec['disk_size'],
+                          'image_id': spec['image_id']}
+        err.extend(self._compare_disk(instance['bootDisk']['diskId'], boot_disk_spec))
 
         if spec.get('secondary_disks_spec') and not instance.get('secondaryDisks'):
             err.extend('secondary_disk not presented on instance')
@@ -399,33 +404,56 @@ class YccVM(YC):
                     raise err
         return operation
 
+    def _translate(self, params):
+        """This funtion must convert all GB values to bytes as ycc api needs.
+        Human readable disk type and platform id to api types.
+
+        :param params: [description]
+        :type params: [type]
+        """
+        for key in params:
+            if key in ['memory', 'disk_size']:
+                params[key] = params[key] * 2 ** 30
+            elif key == 'disk_type':
+                params[key] = getattr(DiskType, params[key].upper()).value
+            elif key == 'platform_id':
+                params[key] = getattr(PlatformId, params[key].replace(' ', '')).value
+            elif key == 'secondary_disks_spec' and params.get('secondary_disks_spec'):
+                for disk in params[key]:
+                    if 'type' in disk:
+                        disk['type'] = getattr(DiskType, disk['type'].upper()).value
+                    if 'size' in disk:
+                        disk['size'] = disk['size'] * 2 ** 30
+        return params
+
     def _get_instance_params(self):
-        name = self.params.get('name')
-        folder_id = self.params.get('folder_id')
-        login = self.params.get('login')
-        hostname = self.params.get('hostname') if self.params.get('hostname') \
-            else self.params.get('name')
-        public_ssh_key = self.params.get('public_ssh_key')
-        zone_id = self.params.get('zone_id')
-        platform_id = self.params.get('platform_id')
-        core_fraction = self.params.get('core_fraction')
-        cores = self.params.get('cores')
-        memory = self.params.get('memory')
-        image_id = self.params.get('image_id')
-        disk_type = self.params.get('disk_type')
-        disk_size = self.params.get('disk_size')
-        secondary_disks_spec = self.params.get('secondary_disks_spec')
-        subnet_id = self.params.get('subnet_id')
-        assign_public_ip = self.params.get('assign_public_ip')
-        preemptible = self.params.get('preemptible')
-        metadata = self.params.get('metadata')
+        spec = self._translate(deepcopy(self.params))
+        name = spec.get('name')
+        folder_id = spec.get('folder_id')
+        login = spec.get('login')
+        hostname = spec.get('hostname') if spec.get('hostname') \
+            else spec.get('name')
+        public_ssh_key = spec.get('public_ssh_key')
+        zone_id = spec.get('zone_id')
+        platform_id = spec.get('platform_id')
+        core_fraction = spec.get('core_fraction')
+        cores = spec.get('cores')
+        memory = spec.get('memory')
+        image_id = spec.get('image_id')
+        disk_type = spec.get('disk_type')
+        disk_size = spec.get('disk_size')
+        secondary_disks_spec = spec.get('secondary_disks_spec')
+        subnet_id = spec.get('subnet_id')
+        assign_public_ip = spec.get('assign_public_ip')
+        preemptible = spec.get('preemptible')
+        metadata = spec.get('metadata')
 
         params = dict(
             folder_id=folder_id,
             name=name,
             resources_spec=_get_resource_spec(memory, cores, core_fraction),
             zone_id=zone_id,
-            platform_id=_get_platform_id(platform_id),
+            platform_id=platform_id,
             boot_disk_spec=_get_attached_disk_spec(disk_type, disk_size, image_id),
             network_interface_specs=_get_network_interface_spec(subnet_id, assign_public_ip)
         )
@@ -475,7 +503,7 @@ class YccVM(YC):
             return self.update_vm()
 
     def add_vm(self):
-        spec = deepcopy(self.params)
+        spec = self._translate(deepcopy(self.params))
         response = dict()
         response['changed'] = False
         name = self.params.get('name')
@@ -488,14 +516,18 @@ class YccVM(YC):
                 response['failed'] = True
                 response['msg'] = "Instance already exits and %s"\
                                   " request params are different" % ', '.join(compare_result)
+            else:
+                response['response'] = instance
+                response['failed'] = False
+                response['changed'] = False
         else:
             params = self._get_instance_params()
 
             operation = self._retry(self.instance_service.Create, params, CreateInstanceRequest)
 
             cloud_response = self._retry(self.waiter, operation)
-            response['response'] = MessageToDict(
-                cloud_response)
+            response.update(MessageToDict(
+                cloud_response))
             response = response_error_check(response)
         return response
 
@@ -601,8 +633,8 @@ def _get_attached_disk_spec(disk_type, disk_size, image_id):
     return AttachedDiskSpec(
         auto_delete=True,
         disk_spec=AttachedDiskSpec.DiskSpec(
-            type_id=getattr(DiskType, disk_type.upper()).value,
-            size=disk_size * 2 ** 30,
+            type_id=disk_type,
+            size=disk_size,
             image_id=image_id))
 
 def _get_secondary_disk_specs(secondary_disks):
@@ -611,21 +643,17 @@ def _get_secondary_disk_specs(secondary_disks):
             auto_delete=disk.get('autodelete', True),
             disk_spec=AttachedDiskSpec.DiskSpec(
                 description=disk.get('description'),
-                type_id=getattr(DiskType, secondary_disks['disk_type'].upper()).value,
-                size=secondary_disks['disk_size'] * 2 ** 30
+                type_id=disk['type'],
+                size=disk['size']
                 )
         ),
         secondary_disks))
 
 def _get_resource_spec(memory, cores, core_fraction):
     return ResourcesSpec(
-        memory=memory * 2**30,
+        memory=memory,
         cores=cores,
         core_fraction=core_fraction)
-
-
-def _get_platform_id(platform_id):
-    return getattr(PlatformId, ''.join(platform_id.split())).value
 
 
 def _get_network_interface_spec(subnet_id, assign_public_ip):
