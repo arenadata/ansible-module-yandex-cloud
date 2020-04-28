@@ -155,6 +155,11 @@ options:
             - Metadata to be translate to vm.
         type: dict
         required: false
+    labels:
+        description:
+            - Vm key value labels
+        type: dict
+        required: false
     state:
         description:
             - VM state.
@@ -224,6 +229,8 @@ EXAMPLES = '''
     preemptible: true
     metadata:
         user-data: "cloud init format in str"
+    labels:
+        my_vm: 1
     state: present
 
 - name: Stop vm
@@ -289,7 +296,7 @@ def vm_argument_spec():
         hostname=dict(type='str', required=False),
         zone_id=dict(type='str', choices=ZONE_IDS, required=False, default='ru-central1-a'),
         platform_id=dict(type='str', choices=PLATFORM_IDS,
-                         required=False, default='Intel Broadwell'),
+                         required=False, default='Intel Cascade Lake'),
         core_fraction=dict(type='int', choices=CORE_FRACTIONS, required=False, default=100),
         cores=dict(type='int', required=False, default=2),
         memory=dict(type='int', required=False, default=2),
@@ -301,6 +308,7 @@ def vm_argument_spec():
         assign_public_ip=dict(type='bool', required=False, default=False),
         preemptible=dict(type='bool', required=False, default=False),
         metadata=dict(type='dict', required=False),
+        labels=dict(type='dict', required=False),
         state=dict(choices=VMS_STATES, required=False),
         operation=dict(choices=VMS_OPERATIONS, required=False),
         max_retries=dict(type='int', required=False, default=5),
@@ -354,10 +362,21 @@ class YccVM(YC):
             [k for k, v in spec.items()
              if k in ['folder_id', 'name', 'zone_id', 'platform_id']
              and not instance[_camel(k)] == v])
-        err.extend(
-            [k for k, v in spec.items()
-             if k in ['memory', 'cores', 'core_fraction']
-             and not instance['resources'][_camel(k)] == str(v)])
+
+        labels = spec.get('labels', {})
+        instance_labels = instance.get('labels', {})
+        lables_key_set = set(labels.keys())
+        instance_lables_key_set = set(instance_labels.keys())
+
+        labels_diff = list(lables_key_set.difference(instance_lables_key_set))
+        labels_intersect = list(
+            filter(
+                lambda x: labels[x] != instance[x],
+                lables_key_set.intersection(instance_lables_key_set)
+            )
+        )
+        if labels_diff or labels_intersect:
+            err.extend([{'labels': labels_diff + labels_intersect}])
 
         if instance['networkInterfaces'][0]['subnetId'] != spec['subnet_id']:
             err.append('subnet_id')
@@ -447,6 +466,7 @@ class YccVM(YC):
         assign_public_ip = spec.get('assign_public_ip')
         preemptible = spec.get('preemptible')
         metadata = spec.get('metadata')
+        labels = spec.get('labels')
 
         params = dict(
             folder_id=folder_id,
@@ -466,6 +486,8 @@ class YccVM(YC):
             params['scheduling_policy'] = _get_scheduling_policy(preemptible)
         if metadata:
             params['metadata'] = metadata
+        if labels:
+            params['labels'] = labels
 
         if login and public_ssh_key:
             params['metadata'] = {
@@ -549,7 +571,7 @@ class YccVM(YC):
         return response
 
     def update_vm(self):
-        pass
+        raise NotImplementedError('update action not implemented')
 
     def start_vm(self):
         response = dict()
