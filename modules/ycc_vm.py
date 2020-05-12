@@ -107,10 +107,18 @@ options:
         type: int
         default: 2
         required: false
+    image_family:
+        description:
+            - Boot image disk family.
+            - Will be used latest image from family to create boot disk.
+            - Required with I(state=present), mutually exclusive with I(image_id)
+        type: str
+        required: false
     image_id:
         description:
             - Boot image id.
             - Required with I(state=present).
+            - Required with I(state=present), mutually exclusive with I(image_family)
         type: str
         required: false
     disk_type:
@@ -277,6 +285,9 @@ from google.protobuf.json_format import MessageToDict
 from grpc._channel import _InactiveRpcError
 from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
 from yandex.cloud.compute.v1.disk_service_pb2_grpc import DiskServiceStub
+from yandex.cloud.compute.v1.image_service_pb2 import \
+    GetImageLatestByFamilyRequest
+from yandex.cloud.compute.v1.image_service_pb2_grpc import ImageServiceStub
 from yandex.cloud.compute.v1.instance_pb2 import IPV4, SchedulingPolicy
 from yandex.cloud.compute.v1.instance_service_pb2 import (
     AttachedDiskSpec, CreateInstanceRequest, DeleteInstanceRequest,
@@ -300,6 +311,7 @@ def vm_argument_spec():
         core_fraction=dict(type='int', choices=CORE_FRACTIONS, required=False, default=100),
         cores=dict(type='int', required=False, default=2),
         memory=dict(type='int', required=False, default=2),
+        image_family=dict(type='str', required=False),
         image_id=dict(type='str', required=False),
         disk_type=dict(choices=DISK_TYPES, required=False, default='hdd'),
         disk_size=dict(type='int', required=False, default=10),
@@ -314,11 +326,14 @@ def vm_argument_spec():
         max_retries=dict(type='int', required=False, default=5),
         retry_multiplayer=dict(type='int', required=False, default=2))
 
-MUTUALLY_EXCLUSIVE = [['state', 'operation'],
-                      ['login', 'metadata'],
-                      ['metadata', 'public_ssh_key']]
-REQUIRED_TOGETHER = [['login', 'public_ssh_key']]
-REQUIRED_IF = [['state', 'present', ['image_id', 'subnet_id']]]
+MUTUALLY_EXCLUSIVE = (('state', 'operation'),
+                      ('login', 'metadata'),
+                      ('metadata', 'public_ssh_key'),
+                      ('image_id', 'image_family'))
+REQUIRED_TOGETHER = (('login', 'public_ssh_key'))
+
+REQUIRED_IF = (('state', 'present', ('subnet_id', )),
+               ('state', 'present', ('image_id', 'image_family'), True))
 
 class YccVM(YC):
 
@@ -326,6 +341,7 @@ class YccVM(YC):
         super().__init__(**kwargs)
         self.instance_service = self.sdk.client(InstanceServiceStub)
         self.disk_service = self.sdk.client(DiskServiceStub)
+        self.image_service = self.sdk.client(ImageServiceStub)
 
     def _list_by_name(self, name, folder_id):
         instances = self.instance_service.List(ListInstancesRequest(
@@ -423,13 +439,14 @@ class YccVM(YC):
                     raise err
         return operation
 
-    def _translate(self, params):
+    def _translate(self):
         """This funtion must convert all GB values to bytes as ycc api needs.
         Human readable disk type and platform id to api types.
 
         :param params: [description]
         :type params: [type]
         """
+        params = deepcopy(self.params)
         for key in params:
             if key in ['memory', 'disk_size']:
                 params[key] = params[key] * 2 ** 30
@@ -443,10 +460,22 @@ class YccVM(YC):
                         disk['type'] = getattr(DiskType, disk['type'].upper()).value
                     if 'size' in disk:
                         disk['size'] = disk['size'] * 2 ** 30
+
+        if params.get('image_family'):
+            params['image_id'] = self.image_service.GetLatestByFamily(
+                GetImageLatestByFamilyRequest(
+                    folder_id='standard-images',
+                    family=params.get('image_family')
+                )
+            ).id
+        elif params.get('image_id'):
+            pass
+        else:
+            raise NotImplementedError
+
         return params
 
-    def _get_instance_params(self):
-        spec = self._translate(deepcopy(self.params))
+    def _get_instance_params(self, spec):
         name = spec.get('name')
         folder_id = spec.get('folder_id')
         login = spec.get('login')
@@ -525,7 +554,7 @@ class YccVM(YC):
             return self.update_vm()
 
     def add_vm(self):
-        spec = self._translate(deepcopy(self.params))
+        spec = self._translate()
         response = dict()
         response['changed'] = False
         name = self.params.get('name')
@@ -543,7 +572,7 @@ class YccVM(YC):
                 response['failed'] = False
                 response['changed'] = False
         else:
-            params = self._get_instance_params()
+            params = self._get_instance_params(spec)
 
             operation = self._retry(self.instance_service.Create, params, CreateInstanceRequest)
 
