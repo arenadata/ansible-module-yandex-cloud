@@ -41,7 +41,7 @@ class YC(AnsibleModule):
 
 
 def response_error_check(response):
-    if response['response'].get('error'):
+    if 'response' not in response or response['response'].get('error'):
         response['failed'] = True
         response['changed'] = False
     else:
