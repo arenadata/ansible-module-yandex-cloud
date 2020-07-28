@@ -270,7 +270,7 @@ VMS_STATES = ['present', 'absent', ]
 VMS_OPERATIONS = ['start', 'stop', 'get_info', 'update']
 PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']
 CORE_FRACTIONS = [5, 20, 50, 100]
-DISK_TYPES = ['hdd', 'nvme']
+DISK_TYPES = ['hdd', 'ssd']
 
 
 # pylint: disable=wrong-import-position
@@ -672,7 +672,7 @@ class PlatformId(Enum):
 
 class DiskType(Enum):
     HDD = 'network-hdd'
-    NVME = 'network-nvme'
+    SSD = 'network-ssd'
 
 
 def _camel(snake_case):
