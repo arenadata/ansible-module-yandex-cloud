@@ -21,10 +21,10 @@ ANSIBLE_METADATA = {
 DOCUMENTATION = '''
 ---
 module: ycc_disk
-short_description: Ansible module to manage virtial machines disks in Yandex compute cloud
+short_description: Ansible module to manage virtual machines disks in Yandex compute cloud
 version_added: "2.4"
 description:
-    - "Ansible module to manage virtial machines disks in Yandex compute cloud"
+    - "Ansible module to manage virtual machines disks in Yandex compute cloud"
 
 options:
     token:
@@ -139,7 +139,7 @@ def main():
             response['msg'] = getattr(error, 'details')()
             response['exception'] = traceback.format_exc()
         else:
-            response['msg'] = 'Error during runtime ocurred'
+            response['msg'] = 'Error during runtime occurred'
             response['exception'] = traceback.format_exc()
         module.fail_json(**response)
 
