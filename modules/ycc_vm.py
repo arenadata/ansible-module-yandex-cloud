@@ -270,7 +270,7 @@ VMS_STATES = ['present', 'absent', ]
 VMS_OPERATIONS = ['start', 'stop', 'get_info', 'update']
 PLATFORM_IDS = ['Intel Cascade Lake', 'Intel Broadwell']
 CORE_FRACTIONS = [5, 20, 50, 100]
-DISK_TYPES = ['hdd', 'nvme']
+DISK_TYPES = ['hdd', 'ssd']
 
 
 # pylint: disable=wrong-import-position
@@ -296,6 +296,10 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     StopInstanceRequest)
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import \
     InstanceServiceStub
+from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStub
+from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
+from grpc._channel import _InactiveRpcError
+
 
 
 def vm_argument_spec():
@@ -313,6 +317,7 @@ def vm_argument_spec():
         memory=dict(type='int', required=False, default=2),
         image_family=dict(type='str', required=False),
         image_id=dict(type='str', required=False),
+        snapshot_id=dict(type='str', required=False),
         disk_type=dict(choices=DISK_TYPES, required=False, default='hdd'),
         disk_size=dict(type='int', required=False, default=10),
         secondary_disks_spec=dict(type='list', required=False),
@@ -326,14 +331,17 @@ def vm_argument_spec():
         max_retries=dict(type='int', required=False, default=5),
         retry_multiplayer=dict(type='int', required=False, default=2))
 
+
 MUTUALLY_EXCLUSIVE = (('state', 'operation'),
                       ('login', 'metadata'),
                       ('metadata', 'public_ssh_key'),
-                      ('image_id', 'image_family'))
+                      ('image_id', 'image_family'),
+                      ('snapshot_id', 'image_id'),
+                      ('snapshot_id', 'image_family'))
 REQUIRED_TOGETHER = (('login', 'public_ssh_key'))
 
 REQUIRED_IF = (('state', 'present', ('subnet_id', )),
-               ('state', 'present', ('image_id', 'image_family'), True))
+               ('state', 'present', ('image_id', 'image_family', 'snapshot_id'), True))
 
 class YccVM(YC):
 
@@ -342,6 +350,8 @@ class YccVM(YC):
         self.instance_service = self.sdk.client(InstanceServiceStub)
         self.disk_service = self.sdk.client(DiskServiceStub)
         self.image_service = self.sdk.client(ImageServiceStub)
+        self.snapshot_service = self.sdk.client(SnapshotServiceStub)
+
 
     def _list_by_name(self, name, folder_id):
         instances = self.instance_service.List(ListInstancesRequest(
@@ -468,7 +478,7 @@ class YccVM(YC):
                     family=params.get('image_family')
                 )
             ).id
-        elif params.get('image_id'):
+        elif params.get('image_id') or params.get('snapshot_id'):
             pass
         else:
             raise NotImplementedError
@@ -488,6 +498,7 @@ class YccVM(YC):
         cores = spec.get('cores')
         memory = spec.get('memory')
         image_id = spec.get('image_id')
+        snapshot_id = spec.get('snapshot_id')
         disk_type = spec.get('disk_type')
         disk_size = spec.get('disk_size')
         secondary_disks_spec = spec.get('secondary_disks_spec')
@@ -497,13 +508,19 @@ class YccVM(YC):
         metadata = spec.get('metadata')
         labels = spec.get('labels')
 
+        if snapshot_id:
+            try:
+                self.snapshot_service.Get(GetSnapshotRequest(snapshot_id=snapshot_id))
+            except _InactiveRpcError:
+                raise ValueError(f"Snapshot with id:{snapshot_id} not found")
+
         params = dict(
             folder_id=folder_id,
             name=name,
             resources_spec=_get_resource_spec(memory, cores, core_fraction),
             zone_id=zone_id,
             platform_id=platform_id,
-            boot_disk_spec=_get_attached_disk_spec(disk_type, disk_size, image_id),
+            boot_disk_spec=_get_attached_disk_spec(disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id),
             network_interface_specs=_get_network_interface_spec(subnet_id, assign_public_ip)
         )
 
@@ -672,7 +689,7 @@ class PlatformId(Enum):
 
 class DiskType(Enum):
     HDD = 'network-hdd'
-    NVME = 'network-nvme'
+    SSD = 'network-ssd'
 
 
 def _camel(snake_case):
@@ -680,13 +697,21 @@ def _camel(snake_case):
     return ''.join([first.lower(), *map(str.title, others)])
 
 
-def _get_attached_disk_spec(disk_type, disk_size, image_id):
+def _get_attached_disk_spec(disk_type, disk_size, image_id=None, snapshot_id=None):
     return AttachedDiskSpec(
-        auto_delete=True,
-        disk_spec=AttachedDiskSpec.DiskSpec(
-            type_id=disk_type,
-            size=disk_size,
-            image_id=image_id))
+            auto_delete=True,
+            disk_spec=AttachedDiskSpec.DiskSpec(
+                type_id=disk_type,
+                size=disk_size,
+                image_id=image_id
+            )) if image_id else AttachedDiskSpec(
+            auto_delete=True,
+            disk_spec=AttachedDiskSpec.DiskSpec(
+                type_id=disk_type,
+                size=disk_size,
+                snapshot_id=snapshot_id
+            ))
+
 
 def _get_secondary_disk_specs(secondary_disks):
     return list(map(
@@ -699,6 +724,7 @@ def _get_secondary_disk_specs(secondary_disks):
                 )
         ),
         secondary_disks))
+
 
 def _get_resource_spec(memory, cores, core_fraction):
     return ResourcesSpec(
@@ -750,7 +776,7 @@ def main():
             response['msg'] = getattr(error, 'details')()
             response['exception'] = traceback.format_exc()
         else:
-            response['msg'] = 'Error during runtime ocurred'
+            response['msg'] = 'Error during runtime occurred'
             response['exception'] = traceback.format_exc()
         module.fail_json(**response)
 
