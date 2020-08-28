@@ -293,13 +293,13 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     AttachedDiskSpec, CreateInstanceRequest, DeleteInstanceRequest,
     ListInstancesRequest, NetworkInterfaceSpec, OneToOneNatSpec,
     PrimaryAddressSpec, ResourcesSpec, StartInstanceRequest,
-    StopInstanceRequest)
+    StopInstanceRequest, UpdateInstanceRequest)
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import \
     InstanceServiceStub
 from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStub
 from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
 from grpc._channel import _InactiveRpcError
-
+from google.protobuf.field_mask_pb2 import FieldMask
 
 
 def vm_argument_spec():
@@ -617,7 +617,22 @@ class YccVM(YC):
         return response
 
     def update_vm(self):
-        raise NotImplementedError('update action not implemented')
+        response = dict()
+        name = self.params.get('name')
+        folder_id = self.params.get('folder_id')
+        labels = self.params.get('labels')
+        instance = self._get_instance(name, folder_id)
+        protobuf_field_mask = FieldMask(paths=['labels'])
+        if instance:
+            self.instance_service.Update(UpdateInstanceRequest(
+                instance_id=instance['id'],
+                labels=labels,
+                update_mask=protobuf_field_mask
+            ))
+            response['msg'] = 'Updated'
+        else:
+            response['msg'] = 'No instance found'
+        return response
 
     def start_vm(self):
         response = dict()
