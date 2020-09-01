@@ -620,8 +620,7 @@ class YccVM(YC):
         response = dict()
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
-        # labels = self.params.get('labels')
-        labels = {'test_updated': 'test_value_updated'}
+        labels = self.params.get('labels')
         instance = self._get_instance(name, folder_id)
         protobuf_field_mask = FieldMask(paths=['labels'])
         if instance:
