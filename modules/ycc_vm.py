@@ -633,8 +633,7 @@ class YccVM(YC):
             response['response'] = MessageToDict(
                 cloud_response)
         else:
-            response['response']['error'] = 'Update error'
-            response = response_error_check(response)
+            response['failed'] = True
         return response
 
     def start_vm(self):
