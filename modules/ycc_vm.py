@@ -624,15 +624,18 @@ class YccVM(YC):
         instance = self._get_instance(name, folder_id)
         protobuf_field_mask = FieldMask(paths=['labels'])
         if instance:
-            operation = self.instance_service.Update(UpdateInstanceRequest(
-                instance_id=instance['id'],
-                labels=labels,
-                update_mask=protobuf_field_mask
-            ))
-            cloud_response = self.waiter(operation)
-
-            response['response'] = MessageToDict(
-                cloud_response)
+            try:
+                operation = self.instance_service.Update(UpdateInstanceRequest(
+                    instance_id=instance['id'],
+                    labels=labels,
+                    update_mask=protobuf_field_mask
+                ))
+                cloud_response = self.waiter(operation)
+                response['response'] = MessageToDict(
+                    cloud_response)
+            # Тут может поменять на конкретный Exception
+            except Exception:
+                response['response']['error'] = 'Update error'
             response = response_error_check(response)
         return response
 
