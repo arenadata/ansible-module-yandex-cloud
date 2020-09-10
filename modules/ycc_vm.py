@@ -632,6 +632,7 @@ class YccVM(YC):
             cloud_response = self.waiter(operation)
             response['response'] = MessageToDict(
                 cloud_response)
+            response = response_error_check(response)
         else:
             response['failed'] = True
         return response
