@@ -624,14 +624,16 @@ class YccVM(YC):
         instance = self._get_instance(name, folder_id)
         protobuf_field_mask = FieldMask(paths=['labels'])
         if instance:
-            self.instance_service.Update(UpdateInstanceRequest(
+            operation = self.instance_service.Update(UpdateInstanceRequest(
                 instance_id=instance['id'],
                 labels=labels,
                 update_mask=protobuf_field_mask
             ))
-            response['msg'] = 'Updated'
-        else:
-            response['msg'] = 'No instance found'
+            cloud_response = self.waiter(operation)
+
+            response['response'] = MessageToDict(
+                cloud_response)
+            response = response_error_check(response)
         return response
 
     def start_vm(self):
