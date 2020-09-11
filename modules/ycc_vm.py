@@ -634,7 +634,8 @@ class YccVM(YC):
                 cloud_response)
             response = response_error_check(response)
         else:
-            response['failed'] = True
+            response['msg'] = "Update instance is missing"
+            response = response_error_check(response)
         return response
 
     def start_vm(self):
