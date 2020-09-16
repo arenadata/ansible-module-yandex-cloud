@@ -327,9 +327,7 @@ def vm_argument_spec():
         metadata=dict(type='dict', required=False),
         labels=dict(type='dict', required=False),
         state=dict(choices=VMS_STATES, required=False),
-        operation=dict(choices=VMS_OPERATIONS, required=False),
-        max_retries=dict(type='int', required=False, default=5),
-        retry_multiplayer=dict(type='int', required=False, default=2))
+        operation=dict(choices=VMS_OPERATIONS, required=False))
 
 
 MUTUALLY_EXCLUSIVE = (('state', 'operation'),
@@ -343,6 +341,7 @@ REQUIRED_TOGETHER = (('login', 'public_ssh_key'))
 REQUIRED_IF = (('state', 'present', ('subnet_id', )),
                ('state', 'present', ('image_id', 'image_family', 'snapshot_id'), True))
 
+
 class YccVM(YC):
 
     def __init__(self, **kwargs):
@@ -352,7 +351,6 @@ class YccVM(YC):
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
 
-
     def _list_by_name(self, name, folder_id):
         instances = self.instance_service.List(ListInstancesRequest(
             folder_id=folder_id,
@@ -361,10 +359,19 @@ class YccVM(YC):
         return MessageToDict(instances)
 
     def _get_instance(self, name, folder_id):
-        instance = self._list_by_name(name, folder_id)
-        if instance:
-            return instance['instances'][0]
-        return instance
+        valid_statuses = ('RUNNING', 'STOPPED', 'ERROR')
+        timeout = 60
+        step = 5
+        timer = 0
+        while timer < timeout:
+            instance = self._list_by_name(name, folder_id)
+            if not instance or (instance.get('instances', ({},))[0].get('status') in valid_statuses):
+                break
+            sleep(step)
+            timer += step
+        else:
+            raise TimeoutError('Wait for instance status exceeded')
+        return instance.get('instances', (None,))[0]
 
     def _compare_disk(self, disk_id, disk_spec):
         err = list()
@@ -433,21 +440,6 @@ class YccVM(YC):
                                       }))
 
         return err
-
-    def _retry(self, func, params, msg_builder=None):
-        for counter in range(self.params.get('max_retries')):
-            try:
-                if msg_builder:
-                    operation = func(msg_builder(**params))
-                else:
-                    operation = func(params)
-                break
-            except _InactiveRpcError as err:
-                counter += 1
-                sleep(self.params.get('retry_multiplayer')*counter)
-                if counter == self.params.get('max_retries'):
-                    raise err
-        return operation
 
     def _translate(self):
         """This funtion must convert all GB values to bytes as ycc api needs.
@@ -591,9 +583,9 @@ class YccVM(YC):
         else:
             params = self._get_instance_params(spec)
 
-            operation = self._retry(self.instance_service.Create, params, CreateInstanceRequest)
+            operation = self.instance_service.Create(CreateInstanceRequest(**params))
 
-            cloud_response = self._retry(self.waiter, operation)
+            cloud_response = self.waiter(operation)
             response.update(MessageToDict(
                 cloud_response))
             response = response_error_check(response)
