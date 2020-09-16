@@ -359,7 +359,7 @@ class YccVM(YC):
         return MessageToDict(instances)
 
     def _get_instance(self, name, folder_id):
-        valid_statuses = ('RUNNING', 'STOPPED', 'ERROR')
+        valid_statuses = ('RUNNING', 'STOPPED')
         timeout = 60
         step = 5
         timer = 0
@@ -367,6 +367,8 @@ class YccVM(YC):
             instance = self._list_by_name(name, folder_id)
             if not instance or (instance.get('instances', ({},))[0].get('status') in valid_statuses):
                 break
+            elif instance.get('instances', ({},))[0].get('status') == 'ERROR':
+                raise Exception('Instance status is ERROR')
             sleep(step)
             timer += step
         else:
@@ -396,15 +398,15 @@ class YccVM(YC):
              if k in ['folder_id', 'name', 'zone_id', 'platform_id']
              and not instance[_camel(k)] == v])
 
-        labels = spec.get('labels', {})
-        instance_labels = instance.get('labels', {})
+        labels = spec['labels'] if spec.get('labels') is not None else {}
+        instance_labels = instance['labels'] if instance.get('labels') is not None else {}
         lables_key_set = set(labels.keys())
         instance_lables_key_set = set(instance_labels.keys())
 
         labels_diff = list(lables_key_set.difference(instance_lables_key_set))
         labels_intersect = list(
             filter(
-                lambda x: labels[x] != instance[x],
+                lambda x: labels[x] != instance_labels[x],
                 lables_key_set.intersection(instance_lables_key_set)
             )
         )
