@@ -15,6 +15,7 @@ from time import sleep
 
 from ansible.module_utils.basic import AnsibleModule
 from yandexcloud import SDK, RetryInterceptor
+import datetime
 
 ZONE_IDS = ['ru-central1-a', 'ru-central1-b', 'ru-central1-c']
 
@@ -33,11 +34,20 @@ class YC(AnsibleModule):
         interceptor = RetryInterceptor(max_retry_count=10)
         self.sdk = SDK(interceptor=interceptor, token=self.params.get('token'))
 
-    def waiter(self, operation):
-        waiter = self.sdk.waiter(operation.id)
-        for _ in waiter:
-            sleep(1)
-        return waiter.operation
+    def waiter(self, operation,  act_op_lim_timeout, timer=None):
+        if not timer:
+            timer = datetime.datetime.now()
+        try:
+            waiter_ = self.sdk.waiter(operation.id)
+            for _ in waiter_:
+                sleep(1)
+        except Exception as err:
+            if err.message.contains("The limit on maximum number of active operations has exceeded"):
+                if (datetime.datetime.now()-timer).seconds >= act_op_lim_timeout or act_op_lim_timeout is None:
+                    raise TimeoutError("Operation timeout exceeded")
+                else:
+                    self.waiter(operation, act_op_lim_timeout, timer=timer)
+        return waiter_.operation
 
 
 def response_error_check(response):
