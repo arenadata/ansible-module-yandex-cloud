@@ -304,6 +304,7 @@ from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStu
 from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
 from grpc._channel import _InactiveRpcError
 from google.protobuf.field_mask_pb2 import FieldMask
+import datetime
 
 
 def vm_argument_spec():
@@ -347,6 +348,19 @@ REQUIRED_IF = (('state', 'present', ('subnet_id', )),
                ('state', 'present', ('image_id', 'image_family', 'snapshot_id'), True))
 
 
+def active_operations_limit_timeout(foo):
+    start_time = datetime.datetime.now()
+    act_op_lim_timeout = vm_argument_spec()['act_op_lim_timeout']
+    while True:
+        try:
+            return foo()
+        except Exception as err:
+            if err.message.contains("The limit on maximum number of active operations has exceeded"):
+                if (datetime.datetime.now() - start_time).seconds >= act_op_lim_timeout or act_op_lim_timeout is None:
+                    raise TimeoutError("Operation timeout exceeded")
+                else:
+                    sleep(5)
+
 class YccVM(YC):
 
     def __init__(self, **kwargs):
@@ -356,21 +370,20 @@ class YccVM(YC):
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
 
-    def _list_by_name(self, name, folder_id, act_op_lim_timeout):
+    def _list_by_name(self, name, folder_id):
         instances = self.instance_service.List(ListInstancesRequest(
             folder_id=folder_id,
             filter='name="%s"' % name
         ))
-        self.waiter(instances, act_op_lim_timeout)
         return MessageToDict(instances)
 
-    def _get_instance(self, name, folder_id, act_op_lim_timeout):
+    def _get_instance(self, name, folder_id):
         valid_statuses = ('RUNNING', 'STOPPED')
         timeout = 60
         step = 5
         timer = 0
         while timer < timeout:
-            instance = self._list_by_name(name, folder_id, act_op_lim_timeout)
+            instance = self._list_by_name(name, folder_id)
             if not instance or (instance.get('instances', ({},))[0].get('status') in valid_statuses):
                 break
             elif instance.get('instances', ({},))[0].get('status') == 'ERROR':
@@ -555,6 +568,7 @@ class YccVM(YC):
         if state == "absent":
             return self.delete_vm()
 
+    @active_operations_limit_timeout
     def manage_operations(self):
         operation = self.params.get('operation')
 
@@ -576,8 +590,7 @@ class YccVM(YC):
         response['changed'] = False
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
-        act_op_lim_timeout =  self.params.get('act_op_lim_timeout')
-        instance = self._get_instance(name, folder_id, act_op_lim_timeout)
+        instance = self._get_instance(name, folder_id)
         if instance:
             compare_result = self._is_same(instance, spec)
             if compare_result:
@@ -591,7 +604,7 @@ class YccVM(YC):
         else:
             params = self._get_instance_params(spec)
             operation = self.instance_service.Create(CreateInstanceRequest(**params))
-            cloud_response = self.waiter(operation, act_op_lim_timeout)
+            cloud_response = self.waiter(operation)
             response.update(MessageToDict(cloud_response))
             response = response_error_check(response)
         return response
@@ -601,13 +614,12 @@ class YccVM(YC):
         response['changed'] = False
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
-        act_op_lim_timeout = self.params.get('act_op_lim_timeout')
-        instance = self._get_instance(name, folder_id, act_op_lim_timeout)
+        instance = self._get_instance(name, folder_id)
         if instance:
             operation = self.instance_service.Delete(DeleteInstanceRequest(
                 instance_id=instance['id']
             ))
-            cloud_response = self.waiter(operation, act_op_lim_timeout)
+            cloud_response = self.waiter(operation)
 
             response['response'] = MessageToDict(
                 cloud_response)
@@ -618,9 +630,8 @@ class YccVM(YC):
         response = dict()
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
-        act_op_lim_timeout = self.params.get('act_op_lim_timeout')
         labels = self.params.get('labels')
-        instance = self._get_instance(name, folder_id, act_op_lim_timeout)
+        instance = self._get_instance(name, folder_id)
         protobuf_field_mask = FieldMask(paths=['labels'])
         if instance:
             operation = self.instance_service.Update(UpdateInstanceRequest(
@@ -628,7 +639,7 @@ class YccVM(YC):
                 labels=labels,
                 update_mask=protobuf_field_mask
             ))
-            cloud_response = self.waiter(operation, act_op_lim_timeout)
+            cloud_response = self.waiter(operation)
             response['response'] = MessageToDict(
                 cloud_response)
             response = response_error_check(response)
@@ -642,14 +653,13 @@ class YccVM(YC):
         response['changed'] = False
         folder_id = self.params.get('folder_id')
         name = self.params.get('name')
-        act_op_lim_timeout = self.params.get('act_op_lim_timeout')
-        instance = self._get_instance(name, folder_id, act_op_lim_timeout)
+        instance = self._get_instance(name, folder_id)
         if instance:
             if instance['status'] == 'STOPPED':
                 operation = self.instance_service.Start(StartInstanceRequest(
                     instance_id=instance['id']
                 ))
-                cloud_response = self.waiter(operation, act_op_lim_timeout)
+                cloud_response = self.waiter(operation)
 
                 response['response'] = MessageToDict(
                     cloud_response)
@@ -668,14 +678,13 @@ class YccVM(YC):
         response['changed'] = False
         folder_id = self.params.get('folder_id')
         name = self.params.get('name')
-        act_op_lim_timeout = self.params.get('act_op_lim_timeout')
-        instance = self._get_instance(name, folder_id, act_op_lim_timeout)
+        instance = self._get_instance(name, folder_id)
         if instance:
             if instance['status'] == 'RUNNING':
                 operation = self.instance_service.Stop(StopInstanceRequest(
                     instance_id=instance['id']
                 ))
-                cloud_response = self.waiter(operation, act_op_lim_timeout)
+                cloud_response = self.waiter(operation)
 
                 response['response'] = MessageToDict(
                     cloud_response)
@@ -693,8 +702,7 @@ class YccVM(YC):
         response = dict()
         name = self.params.get('name')
         folder_id = self.params.get('folder_id')
-        act_op_lim_timeout = self.params.get('act_op_lim_timeout')
-        instance = self._get_instance(name, folder_id, act_op_lim_timeout)
+        instance = self._get_instance(name, folder_id)
         if instance:
             response['instance'] = instance
         else:
