@@ -315,7 +315,7 @@ def vm_argument_spec():
         public_ssh_key=dict(type='str', required=False),
         hostname=dict(type='str', required=False),
         zone_id=dict(type='str', choices=ZONE_IDS, required=False, default='ru-central1-a'),
-        act_op_lim_timeout=dict(type='int', required=False, default=None),
+        active_operations_limit_timeout=dict(type='int', required=False, default=None),
         platform_id=dict(type='str', choices=PLATFORM_IDS,
                          required=False, default='Intel Cascade Lake'),
         core_fraction=dict(type='int', choices=CORE_FRACTIONS, required=False, default=100),
@@ -348,16 +348,16 @@ REQUIRED_IF = (('state', 'present', ('subnet_id', )),
                ('state', 'present', ('image_id', 'image_family', 'snapshot_id'), True))
 
 
-def active_operations_limit_timeout(foo):
+
+def active_operations_limit_timeout(function, timeout):
     start_time = datetime.datetime.now()
-    act_op_lim_timeout = vm_argument_spec()['act_op_lim_timeout']
     while True:
         try:
-            return foo()
+            return function()
         except Exception as err:
             if err.message.contains("The limit on maximum number of active operations has exceeded"):
-                if (datetime.datetime.now() - start_time).seconds >= act_op_lim_timeout or act_op_lim_timeout is None:
-                    raise TimeoutError("Operation timeout exceeded")
+                if (datetime.datetime.now() - start_time).seconds >= timeout or timeout is None:
+                    raise TimeoutError("Cloud active operation timeout exceeded")
                 else:
                     sleep(5)
 
@@ -568,7 +568,6 @@ class YccVM(YC):
         if state == "absent":
             return self.delete_vm()
 
-    @active_operations_limit_timeout
     def manage_operations(self):
         operation = self.params.get('operation')
 
@@ -795,7 +794,8 @@ def main():
         if module.params.get('state'):
             response = module.manage_states()
         elif module.params.get('operation'):
-            response = module.manage_operations()
+            response = active_operations_limit_timeout(module.manage_operations,
+                                                       module.params.get('active_operations_limit_timeout'))
         else:
             raise Exception('One of the state/operation should be provided.')
 
