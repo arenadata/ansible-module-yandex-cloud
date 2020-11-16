@@ -305,7 +305,7 @@ from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
 from grpc._channel import _InactiveRpcError
 from google.protobuf.field_mask_pb2 import FieldMask
 import datetime
-from ansible.module_utils.common.warnings import warn
+from ansible.utils.display import Display
 
 
 def vm_argument_spec():
@@ -365,7 +365,7 @@ class YccVM(YC):
                 return function()
             except Exception as err:
                 if err.message.contains("The limit on maximum number of active operations has exceeded"):
-                    warn('Active operations limit timeout ia activated')
+                    Display().warning('Active operations limit timeout ia activated')
                     self.log('[WARNING] %s' % 'Active operations limit timeout ia activated')
                     if (datetime.datetime.now() - start_time).seconds >= timeout or timeout is None:
                         raise TimeoutError("Cloud active operation timeout exceeded")
