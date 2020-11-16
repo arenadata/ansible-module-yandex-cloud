@@ -305,6 +305,7 @@ from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
 from grpc._channel import _InactiveRpcError
 from google.protobuf.field_mask_pb2 import FieldMask
 import datetime
+from ansible.module_utils.common.warnings import warn
 
 
 def vm_argument_spec():
@@ -348,19 +349,6 @@ REQUIRED_IF = (('state', 'present', ('subnet_id', )),
                ('state', 'present', ('image_id', 'image_family', 'snapshot_id'), True))
 
 
-
-def active_operations_limit_timeout(function, timeout):
-    start_time = datetime.datetime.now()
-    while True:
-        try:
-            return function()
-        except Exception as err:
-            if err.message.contains("The limit on maximum number of active operations has exceeded"):
-                if (datetime.datetime.now() - start_time).seconds >= timeout or timeout is None:
-                    raise TimeoutError("Cloud active operation timeout exceeded")
-                else:
-                    sleep(5)
-
 class YccVM(YC):
 
     def __init__(self, **kwargs):
@@ -369,6 +357,20 @@ class YccVM(YC):
         self.disk_service = self.sdk.client(DiskServiceStub)
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
+
+    def active_operations_limit_timeout(self, function, timeout):
+        start_time = datetime.datetime.now()
+        while True:
+            try:
+                return function()
+            except Exception as err:
+                if err.message.contains("The limit on maximum number of active operations has exceeded"):
+                    warn('Active operations limit timeout ia activated')
+                    self.log('[WARNING] %s' % 'Active operations limit timeout ia activated')
+                    if (datetime.datetime.now() - start_time).seconds >= timeout or timeout is None:
+                        raise TimeoutError("Cloud active operation timeout exceeded")
+                    else:
+                        sleep(5)
 
     def _list_by_name(self, name, folder_id):
         instances = self.instance_service.List(ListInstancesRequest(
