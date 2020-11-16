@@ -16,22 +16,24 @@ from time import sleep
 from ansible.module_utils.basic import AnsibleModule
 from yandexcloud import SDK, RetryInterceptor
 
-ZONE_IDS = ['ru-central1-a', 'ru-central1-b', 'ru-central1-c']
+ZONE_IDS = ["ru-central1-a", "ru-central1-b", "ru-central1-c"]
+
 
 def yc_argument_spec():
     return dict(
-        token=dict(type='str', required=False, default=os.environ.get('yc_token'))
+        token=dict(type="str", required=False, default=os.environ.get("yc_token"))
     )
+
 
 class YC(AnsibleModule):
     def __init__(self, *args, **kwargs):
         argument_spec = yc_argument_spec()
-        argument_spec.update(kwargs.get('argument_spec', dict()))
-        kwargs['argument_spec'] = argument_spec
+        argument_spec.update(kwargs.get("argument_spec", dict()))
+        kwargs["argument_spec"] = argument_spec
 
         super().__init__(*args, **kwargs)
         interceptor = RetryInterceptor(max_retry_count=10)
-        self.sdk = SDK(interceptor=interceptor, token=self.params.get('token'))
+        self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"))
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
@@ -41,9 +43,9 @@ class YC(AnsibleModule):
 
 
 def response_error_check(response):
-    if 'response' not in response or response['response'].get('error'):
-        response['failed'] = True
-        response['changed'] = False
+    if "response" not in response or response["response"].get("error"):
+        response["failed"] = True
+        response["changed"] = False
     else:
-        response['changed'] = True
+        response["changed"] = True
     return response
