@@ -312,14 +312,7 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
 )
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import InstanceServiceStub
 from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
-<<<<<<< HEAD
-from grpc._channel import _InactiveRpcError
-from google.protobuf.field_mask_pb2 import FieldMask
-import datetime
-from ansible.utils.display import Display
-=======
 from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStub
->>>>>>> 8dc242542ea8fb85278103da19f1b8e70fd7ea81
 
 
 def vm_argument_spec():
@@ -383,7 +376,6 @@ class YccVM(YC):
         self.disk_service = self.sdk.client(DiskServiceStub)
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
-
 
     def active_op_limit_timeout(self, timeout, fn, *args, **kwargs):
         """This funtion solves action operation queue cloud behaviour
