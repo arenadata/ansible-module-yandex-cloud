@@ -15,25 +15,29 @@ from time import sleep
 
 from ansible.module_utils.basic import AnsibleModule
 from yandexcloud import SDK, RetryInterceptor
+import json
 
 ZONE_IDS = ["ru-central1-a", "ru-central1-b", "ru-central1-c"]
 
 
 def yc_argument_spec():
     return dict(
-        token=dict(type="str", required=False, default=os.environ.get("yc_token"))
+        token=dict(type="str", required=False, default=None),
+        service_account_credentials=dict(type="dict", required=False, default=None)
     )
 
 
 class YC(AnsibleModule):
     def __init__(self, *args, **kwargs):
+
         argument_spec = yc_argument_spec()
         argument_spec.update(kwargs.get("argument_spec", dict()))
         kwargs["argument_spec"] = argument_spec
 
         super().__init__(*args, **kwargs)
         interceptor = RetryInterceptor(max_retry_count=10)
-        self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"))
+        self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"),
+                       service_account_key=self.params.get("service_account_credentials"))
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
