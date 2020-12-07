@@ -23,7 +23,8 @@ ZONE_IDS = ["ru-central1-a", "ru-central1-b", "ru-central1-c"]
 def yc_argument_spec():
     return dict(
         token=dict(type="str", required=False, default=None),
-        service_account_credentials=dict(type="dict", required=False, default=None)
+        service_account_credentials=dict(type="dict", required=False, default=None),
+        endpoint=dict(type="str", required=False, default=None)
     )
 
 
@@ -37,7 +38,8 @@ class YC(AnsibleModule):
         super().__init__(*args, **kwargs)
         interceptor = RetryInterceptor(max_retry_count=10)
         self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"),
-                       service_account_key=self.params.get("service_account_credentials"))
+                       service_account_key=self.params.get("service_account_credentials"),
+                       endpoint=self.params.get("endpoint"))
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
