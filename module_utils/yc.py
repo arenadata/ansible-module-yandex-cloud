@@ -24,7 +24,8 @@ def yc_argument_spec():
     return dict(
         token=dict(type="str", required=False, default=None),
         service_account_credentials=dict(type="dict", required=False, default=None),
-        endpoint=dict(type="str", required=False, default=None)
+        endpoint=dict(type="str", required=False, default=None),
+        ssl_certificate=dict(type="str", required=False, default=None)
     )
 
 
@@ -39,7 +40,8 @@ class YC(AnsibleModule):
         interceptor = RetryInterceptor(max_retry_count=10)
         self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"),
                        service_account_key=self.params.get("service_account_credentials"),
-                       endpoint=self.params.get("endpoint"))
+                       endpoint=self.params.get("endpoint"),
+                       ssl_certificate=self.params.get("ssl_certificate"))
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
