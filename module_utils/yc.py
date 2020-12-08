@@ -24,7 +24,7 @@ def yc_argument_spec():
     return dict(
         token=dict(type="str", required=False, default=None),
         service_account_credentials=dict(type="dict", required=False, default=None),
-        endpoint=dict(type="str", required=False, default=None),
+        endpoint=dict(type="str", required=False, default='api.cloud.yandex.net'),
         ssl_certificate=dict(type="str", required=False, default=None)
     )
 
