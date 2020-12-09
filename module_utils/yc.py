@@ -17,15 +17,13 @@ from ansible.module_utils.basic import AnsibleModule
 from yandexcloud import SDK, RetryInterceptor
 import json
 
-ZONE_IDS = ["ru-central1-a", "ru-central1-b", "ru-central1-c"]
-
 
 def yc_argument_spec():
     return dict(
         token=dict(type="str", required=False, default=None),
         service_account_credentials=dict(type="dict", required=False, default=None),
         endpoint=dict(type="str", required=False, default='api.cloud.yandex.net'),
-        ssl_certificate=dict(type="str", required=False, default=None)
+        root_certificate=dict(type="str", required=False, default=None)
     )
 
 
@@ -41,7 +39,7 @@ class YC(AnsibleModule):
         self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"),
                        service_account_key=self.params.get("service_account_credentials"),
                        endpoint=self.params.get("endpoint"),
-                       ssl_certificate=self.params.get("ssl_certificate"))
+                       root_certificate=self.params.get("root_certificate").encode('utf-8'))
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
