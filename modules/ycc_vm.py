@@ -286,7 +286,6 @@ from time import sleep
 
 from ansible.module_utils.yc import (  # pylint: disable=E0611, E0401
     YC,
-    ZONE_IDS,
     response_error_check,
 )
 from google.protobuf.field_mask_pb2 import FieldMask
