@@ -15,7 +15,6 @@ from time import sleep
 
 from ansible.module_utils.basic import AnsibleModule
 from yandexcloud import SDK, RetryInterceptor
-import json
 
 
 def yc_argument_spec():
@@ -36,10 +35,12 @@ class YC(AnsibleModule):
 
         super().__init__(*args, **kwargs)
         interceptor = RetryInterceptor(max_retry_count=10)
+        root_certificate = self.params.get("root_certificate").encode('utf-8') if self.params.get("root_certificate") \
+            else self.params.get("root_certificate")
         self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"),
                        service_account_key=self.params.get("service_account_credentials"),
                        endpoint=self.params.get("endpoint"),
-                       root_certificate=self.params.get("root_certificate").encode('utf-8'))
+                       root_certificate=root_certificate)
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
