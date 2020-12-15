@@ -19,11 +19,11 @@ from yandexcloud import SDK, RetryInterceptor
 
 def yc_argument_spec():
     return dict(
-        token=dict(type="str", required=False, default=None),
-        service_account_credentials=dict(type="dict", required=False, default=None),
-        endpoint=dict(type="str", required=False, default='api.cloud.yandex.net'),
-        root_certificate=dict(type="str", required=False, default=None)
-    )
+        auth=dict(type='list', elements='dict', options=dict(
+            token=dict(type="str", required=False, default=None),
+            service_account_credentials=dict(type="dict", required=False, default=None),
+            endpoint=dict(type="str", required=False, default='api.cloud.yandex.net'),
+            root_certificate=dict(type="str", required=False, default=None))))
 
 
 class YC(AnsibleModule):
@@ -35,11 +35,11 @@ class YC(AnsibleModule):
 
         super().__init__(*args, **kwargs)
         interceptor = RetryInterceptor(max_retry_count=10)
-        root_certificate = self.params.get("root_certificate").encode('utf-8') if self.params.get("root_certificate") \
-            else self.params.get("root_certificate")
-        self.sdk = SDK(interceptor=interceptor, token=self.params.get("token"),
-                       service_account_key=self.params.get("service_account_credentials"),
-                       endpoint=self.params.get("endpoint"),
+        root_certificate = self.params.get("auth").get("root_certificate").encode('utf-8') if self.params.get("auth").get("root_certificate") \
+            else self.params.get("auth").get("root_certificate")
+        self.sdk = SDK(interceptor=interceptor, token=self.params.get("auth").get("token"),
+                       service_account_key=self.params.get("auth").get("service_account_credentials"),
+                       endpoint=self.params.get("auth").get("endpoint"),
                        root_certificate=root_certificate)
 
     def waiter(self, operation):
