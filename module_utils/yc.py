@@ -19,7 +19,7 @@ from yandexcloud import SDK, RetryInterceptor
 
 def yc_argument_spec():
     return dict(
-        auth=dict(type='list', elements='dict', options=dict(
+        auth=dict(type='dict', options=dict(
             token=dict(type="str", required=False, default=None),
             service_account_credentials=dict(type="dict", required=False, default=None),
             endpoint=dict(type="str", required=False, default='api.cloud.yandex.net'),
