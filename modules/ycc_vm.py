@@ -286,7 +286,6 @@ from time import sleep
 
 from ansible.module_utils.yc import (  # pylint: disable=E0611, E0401
     YC,
-    ZONE_IDS,
     response_error_check,
 )
 from google.protobuf.field_mask_pb2 import FieldMask
@@ -322,9 +321,7 @@ def vm_argument_spec():
         login=dict(type="str", required=False),
         public_ssh_key=dict(type="str", required=False),
         hostname=dict(type="str", required=False),
-        zone_id=dict(
-            type="str", choices=ZONE_IDS, required=False, default="ru-central1-a"
-        ),
+        zone_id=dict(type="str", required=False, default="ru-central1-a"),
         active_operations_limit_timeout=dict(type="int", required=False, default=None),
         platform_id=dict(
             type="str",
