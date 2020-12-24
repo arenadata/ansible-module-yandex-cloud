@@ -65,8 +65,8 @@ def cloud_init_spec():
 
 
 class TimeoutError(Exception):
-    def __init__(self):
-        super(TimeoutError, self).__init__("Timeout exceeded")
+    def __init__(self, error_msg):
+        super(TimeoutError, self).__init__(error_msg)
 
 
 class CloudInit(AnsibleModule):
@@ -74,15 +74,22 @@ class CloudInit(AnsibleModule):
         super(CloudInit, self).__init__(**kwargs)
 
     def cloud_init_wait(self):
-        end_time = datetime.datetime.now() + datetime.timedelta(
-            seconds=self.params.get("timeout")
-        )
-        while datetime.datetime.now() < end_time:
+        if self.params.get("timeout") is None:
             _, stdout, _ = self.run_command("cloud-init status")
-            sleep(5)
             if "done" in stdout:
                 return stdout
-        raise TimeoutError
+        else:
+            end_time = datetime.datetime.now() + datetime.timedelta(
+                seconds=self.params.get("timeout")
+            )
+            while datetime.datetime.now() < end_time or self.params.get('timeout') == 0:
+                _, stdout, _ = self.run_command("cloud-init status")
+                sleep(5)
+                if "done" in stdout:
+                    return stdout
+            else:
+                raise TimeoutError("Timeout exceeded")
+        raise TimeoutError("Cloud init is not finished")
 
 
 def main():
