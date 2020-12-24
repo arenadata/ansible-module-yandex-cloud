@@ -54,8 +54,10 @@ message:
     type: str
     returned: always
 """
+
 import traceback
-from ansible.module_utils.yc import YC
+import datetime
+from ansible.module_utils.basic import AnsibleModule
 
 
 def cloud_init_spec():
@@ -64,14 +66,17 @@ def cloud_init_spec():
     )
 
 
-class CloudInit(YC):
+class CloudInit(AnsibleModule):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super(CloudInit, self).__init__(**kwargs)
 
     def cloud_init_wait(self):
-        timeout = self.params.get("cloud_init_timeout")
-        while timeout > 0:
-            self.run_command('cloud-init status')
+        end_time = datetime.datetime.now() + datetime.timedelta(seconds=self.params.get("cloud_init_timeout"))
+        while datetime.datetime.now() < end_time:
+            _, stdout, stderr = self.run_command('cloud-init status')
+            if 'done' in stdout:
+                return stdout
+        raise Exception('Timeout exceeded')
 
 
 def main():
@@ -79,15 +84,15 @@ def main():
     module = CloudInit(argument_spec=argument_spec)
     response = dict()
     try:
-        if module.params.get("cloud_init_timeout"):
-            response = module.manage_operations()
+        module.cloud_init_wait()
+        response['return'] = module.cloud_init_wait()
 
     except Exception as error:  # pylint: disable=broad-except
         if hasattr(error, "details"):
             response["msg"] = getattr(error, "details")()
             response["exception"] = traceback.format_exc()
         else:
-            response["msg"] = "Error during runtime ocurred"
+            response["msg"] = "Error during runtime occurred"
             response["exception"] = traceback.format_exc()
         module.fail_json(**response)
 
