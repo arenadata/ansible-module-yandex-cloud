@@ -21,26 +21,24 @@ ANSIBLE_METADATA = {
 DOCUMENTATION = """
 ---
 module: cloud_init
-short_description: Ansible module to manage cloud-init timeout 
+short_description: Ansible module to manage cloud-init timeout
 version_added: "2.4"
 description:
     - "Ansible module to manage cloud-init timeout"
 
 options:
-    cloud_init_timeout:
+    timeout:
       type: integer
-      display_name: "Cloud-init timeout"
-      ui_options:
-        advanced: true
       required: false
-      description: "Timeout for cloud-init to finish running tasks, in seconds"
+      description:
+          - Timeout for cloud-init to finish running tasks, in seconds
 """
 
 
 EXAMPLES = """
 - name: "Wait for cloud-init to finish"
   cloud_init:
-    cloud_init_timeout: 60
+    timeout: 60
 
 """
 
@@ -55,15 +53,20 @@ message:
     returned: always
 """
 
-import traceback
 import datetime
+import traceback
+from time import sleep
+
 from ansible.module_utils.basic import AnsibleModule
 
 
 def cloud_init_spec():
-    return dict(
-        cloud_init_timeout=dict(type="int", required=False, default=600)
-    )
+    return dict(timeout=dict(type="int", required=False, default=600))
+
+
+class TimeoutError(Exception):
+    def __init__(self):
+        super(TimeoutError, self).__init__("Timeout exceeded")
 
 
 class CloudInit(AnsibleModule):
@@ -71,12 +74,15 @@ class CloudInit(AnsibleModule):
         super(CloudInit, self).__init__(**kwargs)
 
     def cloud_init_wait(self):
-        end_time = datetime.datetime.now() + datetime.timedelta(seconds=self.params.get("cloud_init_timeout"))
+        end_time = datetime.datetime.now() + datetime.timedelta(
+            seconds=self.params.get("timeout")
+        )
         while datetime.datetime.now() < end_time:
-            _, stdout, stderr = self.run_command('cloud-init status')
-            if 'done' in stdout:
+            _, stdout, _ = self.run_command("cloud-init status")
+            sleep(5)
+            if "done" in stdout:
                 return stdout
-        raise Exception('Timeout exceeded')
+        raise TimeoutError
 
 
 def main():
@@ -85,7 +91,7 @@ def main():
     response = dict()
     try:
         module.cloud_init_wait()
-        response['return'] = module.cloud_init_wait()
+        response["return"] = module.cloud_init_wait()
 
     except Exception as error:  # pylint: disable=broad-except
         if hasattr(error, "details"):
