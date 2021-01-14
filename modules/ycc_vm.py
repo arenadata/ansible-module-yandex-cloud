@@ -342,6 +342,7 @@ def vm_argument_spec():
         secondary_disks_spec=dict(type="list", required=False),
         subnet_id=dict(type="str", required=False),
         assign_public_ip=dict(type="bool", required=False, default=False),
+        assign_local_ip=dict(type="str", required=False, default=False),
         preemptible=dict(type="bool", required=False, default=False),
         metadata=dict(type="dict", required=False),
         labels=dict(type="dict", required=False),
@@ -580,6 +581,7 @@ class YccVM(YC):
         secondary_disks_spec = spec.get("secondary_disks_spec")
         subnet_id = spec.get("subnet_id")
         assign_public_ip = spec.get("assign_public_ip")
+        assign_local_ip = spec.get("assign_local_ip")
         preemptible = spec.get("preemptible")
         metadata = spec.get("metadata")
         labels = spec.get("labels")
@@ -600,7 +602,7 @@ class YccVM(YC):
                 disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id
             ),
             network_interface_specs=_get_network_interface_spec(
-                subnet_id, assign_public_ip
+                subnet_id, assign_public_ip, assign_local_ip
             ),
         )
 
@@ -846,10 +848,10 @@ def _get_resource_spec(memory, cores, core_fraction):
     return ResourcesSpec(memory=memory, cores=cores, core_fraction=core_fraction)
 
 
-def _get_network_interface_spec(subnet_id, assign_public_ip):
+def _get_network_interface_spec(subnet_id, assign_public_ip, assign_local_ip):
     net_spec = [
         NetworkInterfaceSpec(
-            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec()
+            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec(address=assign_local_ip)
         )
     ]
     if assign_public_ip:
