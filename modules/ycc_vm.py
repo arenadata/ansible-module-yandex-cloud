@@ -400,9 +400,7 @@ class YccVM(YC):
                         )
                     break
                 except _InactiveRpcError as err:
-                    if err._state.response.contains(  # pylint: disable=W0212
-                        "The limit on maximum number of active operations has exceeded"
-                    ):
+                    if "The limit on maximum number of active operations has exceeded" in err._state.details:  # pylint: disable=W0212
                         sleep(5)
                         retry = True
             else:
