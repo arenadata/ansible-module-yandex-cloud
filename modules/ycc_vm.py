@@ -403,6 +403,8 @@ class YccVM(YC):
                     if "The limit on maximum number of active operations has exceeded" in err._state.details:  # pylint: disable=W0212
                         sleep(5)
                         retry = True
+                    else:
+                        raise err
             else:
                 raise TimeoutError(
                     f"Cloud active operation timeout = {timeout} exceeded"
