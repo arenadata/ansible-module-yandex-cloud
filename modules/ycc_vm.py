@@ -288,6 +288,7 @@ from ansible.module_utils.yc import (  # pylint: disable=E0611, E0401
     YC,
     response_error_check,
 )
+from jsonschema import validate
 from google.protobuf.field_mask_pb2 import FieldMask
 from google.protobuf.json_format import MessageToDict
 from grpc._channel import _InactiveRpcError
@@ -653,6 +654,36 @@ class YccVM(YC):
         spec = self._translate()
         response = dict()
         response["changed"] = False
+        sec_disk = self.params.get("secondary_disks")
+        if sec_disk:
+            schema = {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "oneOf": [{
+                        "properties": {
+                            "autodelete": {"type": "boolean"},
+                            "type": {"type": "string",
+                                     "enum": ["ssd", "hdd"]},
+                            "size": {"type": "number"},
+                            "description": {"type": "string"},
+                            "image_id": {"type": "string"},
+                            "snapshot_id": {"type": "string"},
+                        },
+                        "required": ["size"],
+                        "additionalProperties": False},
+                        {
+                            "properties": {
+                                "autodelete": {"type": "boolean"},
+                                "description": {"type": "string"},
+                                "disk_id": {"type": "string"}
+                            },
+                            "required": ["disk_id"],
+                            "additionalProperties": False,
+                        }]
+                }
+            }
+            validate(instance=sec_disk, schema=schema)
         name = self.params.get("name")
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
@@ -833,9 +864,12 @@ def _get_secondary_disk_specs(secondary_disks):
                 auto_delete=disk.get("autodelete", True),
                 disk_spec=AttachedDiskSpec.DiskSpec(
                     description=disk.get("description"),
-                    type_id=disk["type"],
-                    size=disk["size"],
+                    type_id=disk.get("type"),
+                    size=disk.get("size"),
+                    image_id=disk.get("image_id"),
+                    snapshot_id=disk.get("snapshot_id")
                 ),
+                disk_id=disk.get("disk_id")
             ),
             secondary_disks,
         )
