@@ -274,7 +274,7 @@ VMS_STATES = ["present", "absent"]
 VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
 PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell"]
 CORE_FRACTIONS = [5, 20, 50, 100]
-DISK_TYPES = ["hdd", "ssd"]
+DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
 
 # pylint: disable=wrong-import-position
 import datetime
@@ -664,7 +664,7 @@ class YccVM(YC):
                         "properties": {
                             "autodelete": {"type": "boolean"},
                             "type": {"type": "string",
-                                     "enum": ["ssd", "hdd"]},
+                                     "enum": ["ssd", "hdd", "ssd-nonreplicated"]},
                             "size": {"type": "number"},
                             "description": {"type": "string"},
                             "image_id": {"type": "string"},
@@ -832,6 +832,7 @@ class PlatformId(Enum):
 class DiskType(Enum):
     HDD = "network-hdd"
     SSD = "network-ssd"
+    SSD_NONREPLICATED = "network-ssd-nonreplicated"
 
 
 def _camel(snake_case):
