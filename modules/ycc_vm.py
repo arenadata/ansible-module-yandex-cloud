@@ -274,7 +274,7 @@ VMS_STATES = ["present", "absent"]
 VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
 PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell"]
 CORE_FRACTIONS = [5, 20, 50, 100]
-DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
+DISK_TYPES = ["hdd", "ssd", "ssd_nonreplicated"]
 
 # pylint: disable=wrong-import-position
 import datetime
@@ -540,13 +540,13 @@ class YccVM(YC):
             if key in ["memory", "disk_size"]:
                 params[key] = params[key] * 2 ** 30
             elif key == "disk_type":
-                params[key] = getattr(DiskType, params[key].upper()).value
+                params[key] = getattr(DiskType, params[key].upper().replace('-','_')).value
             elif key == "platform_id":
                 params[key] = getattr(PlatformId, params[key].replace(" ", "")).value
             elif key == "secondary_disks_spec" and params.get("secondary_disks_spec"):
                 for disk in params[key]:
                     if "type" in disk:
-                        disk["type"] = getattr(DiskType, disk["type"].upper()).value
+                        disk["type"] = getattr(DiskType, disk["type"].upper().replace('-','_')).value
                     if "size" in disk:
                         disk["size"] = disk["size"] * 2 ** 30
 
