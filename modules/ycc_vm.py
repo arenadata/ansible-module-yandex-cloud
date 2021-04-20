@@ -156,6 +156,11 @@ options:
         type: bool
         default: false
         required: false
+    assign_internal_ip:
+        description:
+            - Assign internal address.
+        type: string
+        required: false
     preemptible:
         description:
             - Create preemtible(may be stopped after working 24h a row) vm.
@@ -238,6 +243,7 @@ EXAMPLES = """
           size: 100
     subnet_id: b0cccg656k0nixi92a
     assign_public_ip: false
+    assign_internal_ip: 10.92.6.5
     preemptible: true
     metadata:
         user-data: "cloud init format in str"
@@ -343,6 +349,7 @@ def vm_argument_spec():
         secondary_disks_spec=dict(type="list", required=False),
         subnet_id=dict(type="str", required=False),
         assign_public_ip=dict(type="bool", required=False, default=False),
+        assign_internal_ip=dict(type="str", required=False, default=False),
         preemptible=dict(type="bool", required=False, default=False),
         metadata=dict(type="dict", required=False),
         labels=dict(type="dict", required=False),
@@ -463,6 +470,14 @@ class YccVM(YC):
             ]
         )
 
+        if len(instance["network_interfaces"]) > 1:
+            err.append("network_interfaces")
+        elif spec["assign_internal_ip"] is None:
+            pass
+        else:
+            if instance["network_interfaces"][0]["primary_v4_address"]["address"] != spec["assign_internal_ip"]:
+                err.append("Internal ip addresses are different")
+
         labels = spec["labels"] if spec.get("labels") is not None else {}
         instance_labels = (
             instance["labels"] if instance.get("labels") is not None else {}
@@ -581,6 +596,7 @@ class YccVM(YC):
         secondary_disks_spec = spec.get("secondary_disks_spec")
         subnet_id = spec.get("subnet_id")
         assign_public_ip = spec.get("assign_public_ip")
+        assign_internal_ip = spec.get("assign_internal_ip")
         preemptible = spec.get("preemptible")
         metadata = spec.get("metadata")
         labels = spec.get("labels")
@@ -601,7 +617,7 @@ class YccVM(YC):
                 disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id
             ),
             network_interface_specs=_get_network_interface_spec(
-                subnet_id, assign_public_ip
+                subnet_id, assign_public_ip, assign_internal_ip
             ),
         )
 
@@ -881,10 +897,10 @@ def _get_resource_spec(memory, cores, core_fraction):
     return ResourcesSpec(memory=memory, cores=cores, core_fraction=core_fraction)
 
 
-def _get_network_interface_spec(subnet_id, assign_public_ip):
+def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip):
     net_spec = [
         NetworkInterfaceSpec(
-            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec()
+            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec(address=assign_internal_ip)
         )
     ]
     if assign_public_ip:
