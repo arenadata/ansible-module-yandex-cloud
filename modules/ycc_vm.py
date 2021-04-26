@@ -349,7 +349,7 @@ def vm_argument_spec():
         secondary_disks_spec=dict(type="list", required=False),
         subnet_id=dict(type="str", required=False),
         assign_public_ip=dict(type="bool", required=False, default=False),
-        assign_internal_ip=dict(type="str", required=False, default=False),
+        assign_internal_ip=dict(type="str", required=False, default=None),
         preemptible=dict(type="bool", required=False, default=False),
         metadata=dict(type="dict", required=False),
         labels=dict(type="dict", required=False),
