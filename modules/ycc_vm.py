@@ -298,6 +298,7 @@ from jsonschema import validate
 from google.protobuf.field_mask_pb2 import FieldMask
 from google.protobuf.json_format import MessageToDict
 from grpc._channel import _InactiveRpcError
+from grpc import StatusCode
 from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
 from yandex.cloud.compute.v1.disk_service_pb2_grpc import DiskServiceStub
 from yandex.cloud.compute.v1.image_service_pb2 import GetImageLatestByFamilyRequest
@@ -566,11 +567,24 @@ class YccVM(YC):
                         disk["size"] = disk["size"] * 2 ** 30
 
         if params.get("image_family"):
-            params["image_id"] = self.image_service.GetLatestByFamily(
-                GetImageLatestByFamilyRequest(
-                    folder_id="standard-images", family=params.get("image_family")
-                )
-            ).id
+            try:
+                params["image_id"] = self.image_service.GetLatestByFamily(
+                    GetImageLatestByFamilyRequest(
+                        folder_id="standard-images", family=params["image_family"]
+                    )
+                ).id
+            except _InactiveRpcError as err:
+                if (
+                        err._state.code  # pylint: disable=protected-access
+                        is StatusCode.NOT_FOUND
+                ):
+                    params["image_id"] = self.image_service.GetLatestByFamily(
+                        GetImageLatestByFamilyRequest(
+                            folder_id=params["folder_id"], family=params["image_family"]
+                        )
+                    ).id
+                else:
+                    raise err
         elif params.get("image_id") or params.get("snapshot_id"):
             pass
         else:
