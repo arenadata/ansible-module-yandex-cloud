@@ -471,12 +471,12 @@ class YccVM(YC):
             ]
         )
 
-        if len(instance["network_interfaces"]) > 1:
+        if len(instance["networkInterfaces"]) > 1:
             err.append("network_interfaces")
         elif spec["assign_internal_ip"] is None:
             pass
         else:
-            if instance["network_interfaces"][0]["primary_v4_address"]["address"] != spec["assign_internal_ip"]:
+            if instance["networkInterfaces"][0]["primaryV4Address"]["address"] != spec["assign_internal_ip"]:
                 err.append("Internal ip addresses are different")
 
         labels = spec["labels"] if spec.get("labels") is not None else {}
