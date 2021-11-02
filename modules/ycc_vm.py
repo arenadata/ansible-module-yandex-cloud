@@ -285,6 +285,7 @@ DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
 # pylint: disable=wrong-import-position
 import datetime
 import traceback
+import re
 from copy import deepcopy
 from enum import Enum
 from json import dumps
@@ -684,6 +685,11 @@ class YccVM(YC):
         spec = self._translate()
         response = dict()
         response["changed"] = False
+
+        hostname = self.params.get("hostname")
+        if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', hostname):
+            self.fail_json(msg=f"bad hostname %s, see Yandex Cloud requirements for hostname" % hostname)
+
         sec_disk = self.params.get("secondary_disks")
         if sec_disk:
             schema = {
