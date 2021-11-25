@@ -313,6 +313,7 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     NetworkInterfaceSpec,
     OneToOneNatSpec,
     PrimaryAddressSpec,
+    DnsRecordSpec,
     ResourcesSpec,
     StartInstanceRequest,
     StopInstanceRequest,
@@ -326,6 +327,7 @@ from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStu
 def vm_argument_spec():
     return dict(
         name=dict(type="str", required=True),
+        fqdn=dict(type="str", required=True),
         folder_id=dict(type="str", required=True),
         login=dict(type="str", required=False),
         public_ssh_key=dict(type="str", required=False),
@@ -595,6 +597,7 @@ class YccVM(YC):
 
     def _get_instance_params(self, spec):  # pylint: disable=R0914
         name = spec.get("name")
+        fqdn = spec.get("fqdn")
         folder_id = spec.get("folder_id")
         login = spec.get("login")
         hostname = spec.get("hostname") if spec.get("hostname") else spec.get("name")
@@ -632,7 +635,7 @@ class YccVM(YC):
                 disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id
             ),
             network_interface_specs=_get_network_interface_spec(
-                subnet_id, assign_public_ip, assign_internal_ip
+                subnet_id, assign_public_ip, assign_internal_ip, fqdn
             ),
         )
 
@@ -918,10 +921,11 @@ def _get_resource_spec(memory, cores, core_fraction):
     return ResourcesSpec(memory=memory, cores=cores, core_fraction=core_fraction)
 
 
-def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip):
+def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip, fqdn):
     net_spec = [
         NetworkInterfaceSpec(
-            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec(address=assign_internal_ip)
+            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec(address=assign_internal_ip,
+                                                                            dns_record_specs=[DnsRecordSpec(fqdn=fqdn)])
         )
     ]
     if assign_public_ip:
