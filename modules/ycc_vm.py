@@ -326,8 +326,8 @@ from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStu
 
 def vm_argument_spec():
     return dict(
-        name=dict(type="str", required=True),
-        fqdn=dict(type="str", required=True),
+        name=dict(type="str", required=False),
+        fqdn=dict(type="str", required=False),
         folder_id=dict(type="str", required=True),
         login=dict(type="str", required=False),
         public_ssh_key=dict(type="str", required=False),
@@ -370,6 +370,8 @@ MUTUALLY_EXCLUSIVE = (
     ("snapshot_id", "image_id"),
     ("snapshot_id", "image_family"),
 )
+REQUIRED_ONE_OF = ("name", "fqdn")
+
 REQUIRED_TOGETHER = ("login", "public_ssh_key")
 
 REQUIRED_IF = (
@@ -596,7 +598,7 @@ class YccVM(YC):
         return params
 
     def _get_instance_params(self, spec):  # pylint: disable=R0914
-        name = spec.get("name")
+        name = spec.get("name").split('.')[0]
         fqdn = spec.get("fqdn")
         folder_id = spec.get("folder_id")
         login = spec.get("login")
@@ -723,7 +725,7 @@ class YccVM(YC):
                 }
             }
             validate(instance=sec_disk, schema=schema)
-        name = self.params.get("name")
+        name = self.params.get("name").split('.')[0]
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -753,7 +755,7 @@ class YccVM(YC):
     def delete_vm(self):
         response = dict()
         response["changed"] = False
-        name = self.params.get("name")
+        name = self.params.get("name").split('.')[0]
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -770,7 +772,7 @@ class YccVM(YC):
 
     def update_vm(self):
         response = dict()
-        name = self.params.get("name")
+        name = self.params.get("name").split('.')[0]
         folder_id = self.params.get("folder_id")
         labels = self.params.get("labels")
         instance = self._get_instance(name, folder_id)
@@ -797,7 +799,7 @@ class YccVM(YC):
         response = dict()
         response["changed"] = False
         folder_id = self.params.get("folder_id")
-        name = self.params.get("name")
+        name = self.params.get("name").split('.')[0]
         instance = self._get_instance(name, folder_id)
         if instance:
             if instance["status"] == "STOPPED":
@@ -826,7 +828,7 @@ class YccVM(YC):
         response = dict()
         response["changed"] = False
         folder_id = self.params.get("folder_id")
-        name = self.params.get("name")
+        name = self.params.get("name").split('.')[0]
         instance = self._get_instance(name, folder_id)
         if instance:
             if instance["status"] == "RUNNING":
@@ -853,7 +855,7 @@ class YccVM(YC):
 
     def get_info(self):
         response = dict()
-        name = self.params.get("name")
+        name = self.params.get("name").split('.')[0]
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
