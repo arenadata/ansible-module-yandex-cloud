@@ -326,8 +326,8 @@ from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStu
 
 def vm_argument_spec():
     return dict(
+        fqdn=dict(type="str"),
         name=dict(type="str", required=False),
-        fqdn=dict(type="str", required=False),
         folder_id=dict(type="str", required=True),
         login=dict(type="str", required=False),
         public_ssh_key=dict(type="str", required=False),
@@ -370,7 +370,8 @@ MUTUALLY_EXCLUSIVE = (
     ("snapshot_id", "image_id"),
     ("snapshot_id", "image_family"),
 )
-REQUIRED_ONE_OF = ("name", "fqdn")
+
+REQUIRED_ONE_OF = [['fqdn', 'name']]
 
 REQUIRED_TOGETHER = ("login", "public_ssh_key")
 
@@ -598,7 +599,6 @@ class YccVM(YC):
         return params
 
     def _get_instance_params(self, spec):  # pylint: disable=R0914
-        name = spec.get("name").split('.')[0]
         fqdn = spec.get("fqdn")
         folder_id = spec.get("folder_id")
         login = spec.get("login")
@@ -629,7 +629,6 @@ class YccVM(YC):
 
         params = dict(
             folder_id=folder_id,
-            name=name,
             resources_spec=_get_resource_spec(memory, cores, core_fraction),
             zone_id=zone_id,
             platform_id=platform_id,
@@ -690,11 +689,9 @@ class YccVM(YC):
         spec = self._translate()
         response = dict()
         response["changed"] = False
-
-        hostname = self.params.get("hostname")
+        hostname = self.params.get("hostname").split('.')[0]
         if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', hostname):
             self.fail_json(msg=f"bad hostname %s, see Yandex Cloud requirements for hostname" % hostname)
-
         sec_disk = self.params.get("secondary_disks")
         if sec_disk:
             schema = {
@@ -725,7 +722,7 @@ class YccVM(YC):
                 }
             }
             validate(instance=sec_disk, schema=schema)
-        name = self.params.get("name").split('.')[0]
+        name = self.params.get("fqdn").split('.')[0]
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -742,6 +739,7 @@ class YccVM(YC):
                 response["changed"] = False
         else:
             params = self._get_instance_params(spec)
+            params['name'] = name
             operation = self.active_op_limit_timeout(
                 self.params.get("active_operations_limit_timeout"),
                 self.instance_service.Create,
@@ -946,6 +944,7 @@ def main():
         argument_spec=argument_spec,
         mutually_exclusive=MUTUALLY_EXCLUSIVE,
         required_together=REQUIRED_TOGETHER,
+        required_one_of=REQUIRED_ONE_OF,
         required_if=REQUIRED_IF,
     )
     response = dict()
