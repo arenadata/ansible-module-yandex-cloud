@@ -327,7 +327,7 @@ from yandex.cloud.compute.v1.snapshot_service_pb2_grpc import SnapshotServiceStu
 def vm_argument_spec():
     return dict(
         fqdn=dict(type="str"),
-        name=dict(type="str", required=False),
+        name=dict(type="str"),
         folder_id=dict(type="str", required=True),
         login=dict(type="str", required=False),
         public_ssh_key=dict(type="str", required=False),
@@ -369,9 +369,10 @@ MUTUALLY_EXCLUSIVE = (
     ("image_id", "image_family"),
     ("snapshot_id", "image_id"),
     ("snapshot_id", "image_family"),
+    ('fqdn', 'name'),
 )
 
-REQUIRED_ONE_OF = [['fqdn', 'name']]
+REQUIRED_ONE_OF = [('fqdn', 'name')]
 
 REQUIRED_TOGETHER = ("login", "public_ssh_key")
 
@@ -599,6 +600,7 @@ class YccVM(YC):
         return params
 
     def _get_instance_params(self, spec):  # pylint: disable=R0914
+        name = spec.get("name")
         fqdn = spec.get("fqdn")
         folder_id = spec.get("folder_id")
         login = spec.get("login")
@@ -629,6 +631,7 @@ class YccVM(YC):
 
         params = dict(
             folder_id=folder_id,
+            name=name,
             resources_spec=_get_resource_spec(memory, cores, core_fraction),
             zone_id=zone_id,
             platform_id=platform_id,
@@ -689,7 +692,7 @@ class YccVM(YC):
         spec = self._translate()
         response = dict()
         response["changed"] = False
-        hostname = self.params.get("hostname").split('.')[0]
+        hostname = self.params.get("hostname")
         if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', hostname):
             self.fail_json(msg=f"bad hostname %s, see Yandex Cloud requirements for hostname" % hostname)
         sec_disk = self.params.get("secondary_disks")
@@ -722,7 +725,7 @@ class YccVM(YC):
                 }
             }
             validate(instance=sec_disk, schema=schema)
-        name = self.params.get("fqdn").split('.')[0]
+        name = self.params.get("name")
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -739,7 +742,6 @@ class YccVM(YC):
                 response["changed"] = False
         else:
             params = self._get_instance_params(spec)
-            params['name'] = name
             operation = self.active_op_limit_timeout(
                 self.params.get("active_operations_limit_timeout"),
                 self.instance_service.Create,
@@ -753,7 +755,7 @@ class YccVM(YC):
     def delete_vm(self):
         response = dict()
         response["changed"] = False
-        name = self.params.get("name").split('.')[0]
+        name = self.params.get("name")
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
@@ -770,7 +772,7 @@ class YccVM(YC):
 
     def update_vm(self):
         response = dict()
-        name = self.params.get("name").split('.')[0]
+        name = self.params.get("name")
         folder_id = self.params.get("folder_id")
         labels = self.params.get("labels")
         instance = self._get_instance(name, folder_id)
@@ -797,7 +799,7 @@ class YccVM(YC):
         response = dict()
         response["changed"] = False
         folder_id = self.params.get("folder_id")
-        name = self.params.get("name").split('.')[0]
+        name = self.params.get("name")
         instance = self._get_instance(name, folder_id)
         if instance:
             if instance["status"] == "STOPPED":
@@ -826,7 +828,7 @@ class YccVM(YC):
         response = dict()
         response["changed"] = False
         folder_id = self.params.get("folder_id")
-        name = self.params.get("name").split('.')[0]
+        name = self.params.get("name")
         instance = self._get_instance(name, folder_id)
         if instance:
             if instance["status"] == "RUNNING":
@@ -853,7 +855,7 @@ class YccVM(YC):
 
     def get_info(self):
         response = dict()
-        name = self.params.get("name").split('.')[0]
+        name = self.params.get("name")
         folder_id = self.params.get("folder_id")
         instance = self._get_instance(name, folder_id)
         if instance:
