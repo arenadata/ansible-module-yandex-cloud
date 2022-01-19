@@ -27,11 +27,9 @@ def yc_argument_spec():
 
 class YC(AnsibleModule):
     def __init__(self, *args, **kwargs):
-
         argument_spec = yc_argument_spec()
         argument_spec.update(kwargs.get("argument_spec", dict()))
         kwargs["argument_spec"] = argument_spec
-
         super().__init__(*args, **kwargs)
 
         if not (self.params["auth"]["token"] or self.params["auth"]["service_account_key"]):
@@ -41,6 +39,12 @@ class YC(AnsibleModule):
         if self.params["auth"]["root_certificates"]:
             self.params["auth"]["root_certificates"] = self.params["auth"]["root_certificates"].encode("utf-8")
         self.sdk = SDK(interceptor=interceptor, **self.params["auth"])
+        if self.params.get("fqdn"):
+            self.params["name"] = self.params["fqdn"].split('.')[0]
+            self.params["hostname"] = self.params["fqdn"].split('.')[0]
+        else:
+            self.params["name"] = self.params["name"].split('.')[0]
+            self.params["hostname"] = self.params["name"].split('.')[0]
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
