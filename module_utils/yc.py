@@ -38,9 +38,10 @@ class YC(AnsibleModule):
         self.sdk = SDK(interceptor=interceptor, **self.params["auth"])
         if self.params.get("fqdn") and not self.params.get("name"):
             self.params["name"] = self.params["fqdn"].split('.')[0]
-        if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["name"]):
-            self.fail_json(msg=f'bad hostname {self.params["name"]}, see Yandex Cloud requirements for hostname')
-        if "hostname" in self.params:
+        if self.params.get("name"):
+            if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["name"]):
+                self.fail_json(msg=f'bad name {self.params["name"]}, see Yandex Cloud requirements for name')
+        if self.params.get("hostname"):
             if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["hostname"]):
                 self.fail_json(msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname')
 
