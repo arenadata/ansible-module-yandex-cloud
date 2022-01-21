@@ -369,7 +369,6 @@ MUTUALLY_EXCLUSIVE = (
     ("image_id", "image_family"),
     ("snapshot_id", "image_id"),
     ("snapshot_id", "image_family"),
-    ('fqdn', 'name'),
 )
 
 REQUIRED_ONE_OF = [('fqdn', 'name')]
@@ -692,9 +691,6 @@ class YccVM(YC):
         spec = self._translate()
         response = dict()
         response["changed"] = False
-        hostname = self.params.get("hostname")
-        if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', hostname):
-            self.fail_json(msg=f"bad hostname %s, see Yandex Cloud requirements for hostname" % hostname)
         sec_disk = self.params.get("secondary_disks")
         if sec_disk:
             schema = {

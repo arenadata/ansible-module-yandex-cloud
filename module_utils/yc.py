@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from time import sleep
 
 from ansible.module_utils.basic import AnsibleModule
@@ -39,12 +40,13 @@ class YC(AnsibleModule):
         if self.params["auth"]["root_certificates"]:
             self.params["auth"]["root_certificates"] = self.params["auth"]["root_certificates"].encode("utf-8")
         self.sdk = SDK(interceptor=interceptor, **self.params["auth"])
-        if self.params.get("fqdn"):
+        if self.params.get("fqdn") and not self.params.get("name"):
             self.params["name"] = self.params["fqdn"].split('.')[0]
-            self.params["hostname"] = self.params["fqdn"].split('.')[0]
-        else:
-            self.params["name"] = self.params["name"].split('.')[0]
-            self.params["hostname"] = self.params["name"].split('.')[0]
+        if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["name"]):
+            self.fail_json(msg=f'bad hostname {self.params["name"]}, see Yandex Cloud requirements for hostname')
+        if "hostname" in self.params:
+            if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["hostname"]):
+                self.fail_json(msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname')
 
     def waiter(self, operation):
         waiter = self.sdk.waiter(operation.id)
