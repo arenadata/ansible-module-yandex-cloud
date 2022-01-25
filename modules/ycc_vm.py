@@ -388,6 +388,14 @@ class YccVM(YC):
         self.disk_service = self.sdk.client(DiskServiceStub)
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
+        if self.params.get("fqdn") and not self.params.get("name"):
+            self.params["name"] = self.params["fqdn"].split('.')[0]
+        if self.params.get("name"):
+            if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["name"]):
+                self.fail_json(msg=f'bad name {self.params["name"]}, see Yandex Cloud requirements for name')
+        if self.params.get("hostname"):
+            if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["hostname"]):
+                self.fail_json(msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname')
 
     def active_op_limit_timeout(self, timeout, fn, *args, **kwargs):
         """This funtion solves action operation queue cloud behaviour
