@@ -278,7 +278,7 @@ message:
 
 VMS_STATES = ["present", "absent"]
 VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
-PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell"]
+PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake"]
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
 
@@ -863,6 +863,7 @@ class YccVM(YC):
 class PlatformId(Enum):
     IntelBroadwell = "standard-v1"
     IntelCascadeLake = "standard-v2"
+    IntelIceLake = "standard-v3"
 
 
 class DiskType(Enum):
