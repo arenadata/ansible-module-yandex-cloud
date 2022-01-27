@@ -396,6 +396,8 @@ class YccVM(YC):
         if self.params.get("hostname"):
             if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["hostname"]):
                 self.fail_json(msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname')
+        if self.params.get("fqdn") and self.params.get("fqdn")[-1] != '.':
+            self.params["fqdn"] = self.params["fqdn"] + '.'
 
     def active_op_limit_timeout(self, timeout, fn, *args, **kwargs):
         """This funtion solves action operation queue cloud behaviour
