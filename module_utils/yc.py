@@ -10,7 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from time import sleep
 
 from ansible.module_utils.basic import AnsibleModule
@@ -32,10 +31,8 @@ class YC(AnsibleModule):
         argument_spec.update(kwargs.get("argument_spec", dict()))
         kwargs["argument_spec"] = argument_spec
         super().__init__(*args, **kwargs)
-
         if not (self.params["auth"]["token"] or self.params["auth"]["service_account_key"]):
             self.fail_json(msg="authorization token or service account key should be provided.")
-
         interceptor = RetryInterceptor(max_retry_count=10)
         if self.params["auth"]["root_certificates"]:
             self.params["auth"]["root_certificates"] = self.params["auth"]["root_certificates"].encode("utf-8")
