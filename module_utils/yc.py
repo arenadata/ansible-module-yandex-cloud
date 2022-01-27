@@ -10,7 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from time import sleep
 
 from ansible.module_utils.basic import AnsibleModule
