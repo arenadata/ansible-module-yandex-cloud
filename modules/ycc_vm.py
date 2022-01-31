@@ -933,7 +933,8 @@ def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip,
     net_spec = [
         NetworkInterfaceSpec(
             subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec(address=assign_internal_ip,
-                                                                            dns_record_specs=[DnsRecordSpec(fqdn=fqdn)])
+                                                                            dns_record_specs=[DnsRecordSpec(fqdn=fqdn,
+                                                                                                            ptr=True)])
         )
     ]
     if assign_public_ip:
