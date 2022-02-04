@@ -371,7 +371,7 @@ MUTUALLY_EXCLUSIVE = (
     ("snapshot_id", "image_family"),
 )
 
-REQUIRED_ONE_OF = [('fqdn', 'name')]
+REQUIRED_ONE_OF = [("fqdn", "name")]
 
 REQUIRED_TOGETHER = ("login", "public_ssh_key")
 
@@ -389,15 +389,19 @@ class YccVM(YC):
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
         if self.params.get("fqdn") and not self.params.get("name"):
-            self.params["name"] = self.params["fqdn"].split('.')[0]
+            self.params["name"] = self.params["fqdn"].split(".")[0]
         if self.params.get("name"):
-            if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["name"]):
-                self.fail_json(msg=f'bad name {self.params["name"]}, see Yandex Cloud requirements for name')
+            if not re.match("^[a-z][a-z0-9-]{1,61}[a-z0-9]$", self.params["name"]):
+                self.fail_json(
+                    msg=f'bad name {self.params["name"]}, see Yandex Cloud requirements for name'
+                )
         if self.params.get("hostname"):
-            if not re.match('^[a-z][a-z0-9-]{1,61}[a-z0-9]$', self.params["hostname"]):
-                self.fail_json(msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname')
-        if self.params.get("fqdn") and self.params.get("fqdn")[-1] != '.':
-            self.params["fqdn"] = self.params["fqdn"] + '.'
+            if not re.match("^[a-z][a-z0-9-]{1,61}[a-z0-9]$", self.params["hostname"]):
+                self.fail_json(
+                    msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname'
+                )
+        if self.params.get("fqdn") and self.params.get("fqdn")[-1] != ".":
+            self.params["fqdn"] = self.params["fqdn"] + "."
 
     def active_op_limit_timeout(self, timeout, fn, *args, **kwargs):
         """This funtion solves action operation queue cloud behaviour
@@ -425,7 +429,10 @@ class YccVM(YC):
                         )
                     break
                 except _InactiveRpcError as err:
-                    if "The limit on maximum number of active operations has exceeded" in err._state.details:  # pylint: disable=W0212
+                    if (
+                        "The limit on maximum number of active operations has exceeded"
+                        in err._state.details
+                    ):  # pylint: disable=W0212
                         sleep(5)
                         retry = True
                     else:
@@ -492,7 +499,10 @@ class YccVM(YC):
         elif spec["assign_internal_ip"] is None:
             pass
         else:
-            if instance["networkInterfaces"][0]["primaryV4Address"]["address"] != spec["assign_internal_ip"]:
+            if (
+                instance["networkInterfaces"][0]["primaryV4Address"]["address"]
+                != spec["assign_internal_ip"]
+            ):
                 err.append("Internal ip addresses are different")
 
         labels = spec["labels"] if spec.get("labels") is not None else {}
@@ -572,13 +582,17 @@ class YccVM(YC):
             if key in ["memory", "disk_size"]:
                 params[key] = params[key] * 2 ** 30
             elif key == "disk_type":
-                params[key] = getattr(DiskType, params[key].upper().replace('-','_')).value
+                params[key] = getattr(
+                    DiskType, params[key].upper().replace("-", "_")
+                ).value
             elif key == "platform_id":
                 params[key] = getattr(PlatformId, params[key].replace(" ", "")).value
             elif key == "secondary_disks_spec" and params.get("secondary_disks_spec"):
                 for disk in params[key]:
                     if "type" in disk:
-                        disk["type"] = getattr(DiskType, disk["type"].upper().replace('-','_')).value
+                        disk["type"] = getattr(
+                            DiskType, disk["type"].upper().replace("-", "_")
+                        ).value
                     if "size" in disk:
                         disk["size"] = disk["size"] * 2 ** 30
 
@@ -591,8 +605,8 @@ class YccVM(YC):
                 ).id
             except _InactiveRpcError as err:
                 if (
-                        err._state.code  # pylint: disable=protected-access
-                        is StatusCode.NOT_FOUND
+                    err._state.code  # pylint: disable=protected-access
+                    is StatusCode.NOT_FOUND
                 ):
                     params["image_id"] = self.image_service.GetLatestByFamily(
                         GetImageLatestByFamilyRequest(
@@ -707,28 +721,33 @@ class YccVM(YC):
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "oneOf": [{
-                        "properties": {
-                            "autodelete": {"type": "boolean"},
-                            "type": {"type": "string",
-                                     "enum": ["ssd", "hdd", "ssd-nonreplicated"]},
-                            "size": {"type": "number"},
-                            "description": {"type": "string"},
-                            "image_id": {"type": "string"},
-                            "snapshot_id": {"type": "string"},
+                    "oneOf": [
+                        {
+                            "properties": {
+                                "autodelete": {"type": "boolean"},
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["ssd", "hdd", "ssd-nonreplicated"],
+                                },
+                                "size": {"type": "number"},
+                                "description": {"type": "string"},
+                                "image_id": {"type": "string"},
+                                "snapshot_id": {"type": "string"},
+                            },
+                            "required": ["size"],
+                            "additionalProperties": False,
                         },
-                        "required": ["size"],
-                        "additionalProperties": False},
                         {
                             "properties": {
                                 "autodelete": {"type": "boolean"},
                                 "description": {"type": "string"},
-                                "disk_id": {"type": "string"}
+                                "disk_id": {"type": "string"},
                             },
                             "required": ["disk_id"],
                             "additionalProperties": False,
-                        }]
-                }
+                        },
+                    ],
+                },
             }
             validate(instance=sec_disk, schema=schema)
         name = self.params.get("name")
@@ -916,9 +935,9 @@ def _get_secondary_disk_specs(secondary_disks):
                     type_id=disk.get("type"),
                     size=disk.get("size"),
                     image_id=disk.get("image_id"),
-                    snapshot_id=disk.get("snapshot_id")
+                    snapshot_id=disk.get("snapshot_id"),
                 ),
-                disk_id=disk.get("disk_id")
+                disk_id=disk.get("disk_id"),
             ),
             secondary_disks,
         )
@@ -932,9 +951,11 @@ def _get_resource_spec(memory, cores, core_fraction):
 def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip, fqdn):
     net_spec = [
         NetworkInterfaceSpec(
-            subnet_id=subnet_id, primary_v4_address_spec=PrimaryAddressSpec(address=assign_internal_ip,
-                                                                            dns_record_specs=[DnsRecordSpec(fqdn=fqdn,
-                                                                                                            ptr=True)])
+            subnet_id=subnet_id,
+            primary_v4_address_spec=PrimaryAddressSpec(
+                address=assign_internal_ip,
+                dns_record_specs=[DnsRecordSpec(fqdn=fqdn, ptr=True)],
+            ),
         )
     ]
     if assign_public_ip:
