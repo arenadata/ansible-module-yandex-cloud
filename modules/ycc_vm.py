@@ -118,6 +118,12 @@ options:
             - Required with I(state=present), mutually exclusive with I(image_id)
         type: str
         required: false
+    image_folder:
+        description:
+            - Folders to search images by its family besides from
+            - standard and target folders
+        type: list
+        required: false
     image_id:
         description:
             - Boot image id.
@@ -284,8 +290,8 @@ DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
 
 # pylint: disable=wrong-import-position
 import datetime
-import traceback
 import re
+import traceback
 from copy import deepcopy
 from enum import Enum
 from json import dumps
@@ -295,11 +301,11 @@ from ansible.module_utils.yc import (  # pylint: disable=E0611, E0401
     YC,
     response_error_check,
 )
-from jsonschema import validate
 from google.protobuf.field_mask_pb2 import FieldMask
 from google.protobuf.json_format import MessageToDict
-from grpc._channel import _InactiveRpcError
 from grpc import StatusCode
+from grpc._channel import _InactiveRpcError
+from jsonschema import validate
 from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
 from yandex.cloud.compute.v1.disk_service_pb2_grpc import DiskServiceStub
 from yandex.cloud.compute.v1.image_service_pb2 import GetImageLatestByFamilyRequest
@@ -309,11 +315,11 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     AttachedDiskSpec,
     CreateInstanceRequest,
     DeleteInstanceRequest,
+    DnsRecordSpec,
     ListInstancesRequest,
     NetworkInterfaceSpec,
     OneToOneNatSpec,
     PrimaryAddressSpec,
-    DnsRecordSpec,
     ResourcesSpec,
     StartInstanceRequest,
     StopInstanceRequest,
@@ -346,6 +352,7 @@ def vm_argument_spec():
         cores=dict(type="int", required=False, default=2),
         memory=dict(type="int", required=False, default=2),
         image_family=dict(type="str", required=False),
+        image_folder=dict(type="list", required=False),
         image_id=dict(type="str", required=False),
         snapshot_id=dict(type="str", required=False),
         disk_type=dict(choices=DISK_TYPES, required=False, default="hdd"),
@@ -378,6 +385,7 @@ REQUIRED_TOGETHER = ("login", "public_ssh_key")
 REQUIRED_IF = (
     ("state", "present", ("subnet_id",)),
     ("state", "present", ("image_id", "image_family", "snapshot_id"), True),
+    ("image_folder", "all", ("image_family",), True),
 )
 
 
@@ -431,8 +439,8 @@ class YccVM(YC):
                 except _InactiveRpcError as err:
                     if (
                         "The limit on maximum number of active operations has exceeded"
-                        in err._state.details
-                    ):  # pylint: disable=W0212
+                        in err._state.details  # pylint: disable=W0212
+                    ):
                         sleep(5)
                         retry = True
                     else:
@@ -597,30 +605,38 @@ class YccVM(YC):
                         disk["size"] = disk["size"] * 2 ** 30
 
         if params.get("image_family"):
-            try:
-                params["image_id"] = self.image_service.GetLatestByFamily(
-                    GetImageLatestByFamilyRequest(
-                        folder_id="standard-images", family=params["image_family"]
-                    )
-                ).id
-            except _InactiveRpcError as err:
-                if (
-                    err._state.code  # pylint: disable=protected-access
-                    is StatusCode.NOT_FOUND
-                ):
-                    params["image_id"] = self.image_service.GetLatestByFamily(
-                        GetImageLatestByFamilyRequest(
-                            folder_id=params["folder_id"], family=params["image_family"]
-                        )
-                    ).id
-                else:
-                    raise err
+            params["image_id"] = self._get_image_by_family()
         elif params.get("image_id") or params.get("snapshot_id"):
             pass
         else:
             raise NotImplementedError
 
         return params
+
+    def _get_image_by_family(self):
+
+        folders = self.params.get("image_folder")
+        if not folders:
+            folders = ["standard-images", self.params["folder_id"]]
+
+        for folder in folders:
+            try:
+                image_id = self.image_service.GetLatestByFamily(
+                    GetImageLatestByFamilyRequest(
+                        folder_id=folder, family=self.params["image_family"]
+                    )
+                ).id
+                break
+            except _InactiveRpcError as err:
+                if (
+                    err._state.code  # pylint: disable=protected-access
+                    is not StatusCode.NOT_FOUND
+                ):
+                    raise err
+        else:
+            raise ImageFamilyNotFound
+
+        return image_id
 
     def _get_instance_params(self, spec):  # pylint: disable=R0914
         name = spec.get("name")
@@ -890,6 +906,10 @@ class YccVM(YC):
         return response
 
 
+class ImageFamilyNotFound(Exception):
+    pass
+
+
 class PlatformId(Enum):
     IntelBroadwell = "standard-v1"
     IntelCascadeLake = "standard-v2"
@@ -949,12 +969,14 @@ def _get_resource_spec(memory, cores, core_fraction):
 
 
 def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip, fqdn):
+
+    dns_record_specs = [DnsRecordSpec(fqdn=fqdn, ptr=True)] if fqdn else None
     net_spec = [
         NetworkInterfaceSpec(
             subnet_id=subnet_id,
             primary_v4_address_spec=PrimaryAddressSpec(
                 address=assign_internal_ip,
-                dns_record_specs=[DnsRecordSpec(fqdn=fqdn, ptr=True)],
+                dns_record_specs=dns_record_specs,
             ),
         )
     ]
