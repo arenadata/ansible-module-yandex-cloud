@@ -16,6 +16,14 @@ ansible-module-yandex-cloud is a set of ansible modules that manage a yandex clo
 2. git clone `https://github.com/arenadata/ansible-module-yandex-cloud`
 3. cd ansible-module-yandex-cloud
 
+#### If run playbook.yml in this directory, then create ansible.cfg
+
+```
+[defaults]
+library = ./modules
+module_utils = ./module_utils
+```
+
 ## Documentation
 
 ### VM managment
@@ -56,7 +64,7 @@ OPTIONS (= is mandatory):
 - disk_type
         Primary disk type.
         [Default: hdd]
-        choises: hdd, nvme
+        choises: hdd, ssd
         type: str
 
 = folder_id
@@ -171,29 +179,30 @@ EXAMPLES:
 
 - name: Create vm
   ycc_vm:
-    token: {{ my_token }}
-    name: my_vm
+    auth:
+      token: {{ my_token }}
+    name: myvm
     login: john_doe
     public_ssh_key: john_doe_public_key
-    hostname: my_vm
-    zone_id: ru-central1-a
+    hostname: myvm
+    zone_id: ru-central1-c
     folder_id: b1gotqhf076hh183dn
     platform_id: "Intel Cascade Lake"
     core_fraction: 100
     cores: 2
     memory: 2
     image_id: fd84uob96bu79jk8fqht
-    disk_type: nvme
+    disk_type: ssd
     disk_size: 50
     secondary_disks_spec:
-        - autodelete: true
-          description: disk1
-          type: nvme
-          size: 10
-        - autodelete: false
-          description: disk2
-          type: hdd
-          size: 100
+      - autodelete: true
+        description: disk1
+        type: ssd
+        size: 10
+      - autodelete: false
+        description: disk2
+        type: hdd
+        size: 100
     subnet_id: b0cccg656k0nixi92a
     assign_public_ip: false
     preemptible: true
@@ -204,13 +213,13 @@ EXAMPLES:
 - name: Stop vm
   ycc_vm:
     token: {{ my_token }}
-    name: my_tyni_vm
+    name: myvm
     operation: stop
 
 - name: Start vm
   ycc_vm:
     token: {{ my_token }}
-    name: my_tyni_vm
+    name: myvm
     operation: start
 
 
