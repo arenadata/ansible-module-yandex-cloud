@@ -183,6 +183,11 @@ options:
             - Vm key value labels
         type: dict
         required: false
+    security_groups:
+        description:
+            - Vm security group list
+        type: list
+        required: false        
     state:
         description:
             - VM state.
@@ -201,6 +206,7 @@ options:
             - stop
             - get_info
             - update
+            - update_sg
         required: false
     max_retries:
         description:
@@ -283,7 +289,7 @@ message:
 """
 
 VMS_STATES = ["present", "absent"]
-VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
+VMS_OPERATIONS = ["start", "stop", "get_info", "update", "update_sg"]
 PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake"]
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
@@ -324,6 +330,7 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     StartInstanceRequest,
     StopInstanceRequest,
     UpdateInstanceRequest,
+    UpdateInstanceNetworkInterfaceRequest,
 )
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import InstanceServiceStub
 from yandex.cloud.compute.v1.snapshot_service_pb2 import GetSnapshotRequest
@@ -364,6 +371,7 @@ def vm_argument_spec():
         preemptible=dict(type="bool", required=False, default=False),
         metadata=dict(type="dict", required=False),
         labels=dict(type="dict", required=False),
+        security_groups=dict(type="list", required=False),
         state=dict(choices=VMS_STATES, required=False),
         operation=dict(choices=VMS_OPERATIONS, required=False),
     )
@@ -661,6 +669,7 @@ class YccVM(YC):
         preemptible = spec.get("preemptible")
         metadata = spec.get("metadata")
         labels = spec.get("labels")
+        security_groups = spec.get("security_groups")
 
         if snapshot_id:
             try:
@@ -678,7 +687,7 @@ class YccVM(YC):
                 disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id
             ),
             network_interface_specs=_get_network_interface_spec(
-                subnet_id, assign_public_ip, assign_internal_ip, fqdn
+                subnet_id, assign_public_ip, assign_internal_ip, fqdn, security_groups
             ),
         )
 
@@ -724,6 +733,7 @@ class YccVM(YC):
             "stop": self.stop_vm,
             "get_info": self.get_info,
             "update": self.update_vm,
+            "update_sg": self.update_sg,
         }
         return sw[self.params.get("operation")]()
 
@@ -835,6 +845,32 @@ class YccVM(YC):
             response["msg"] = "Update instance is missing"
             response = response_error_check(response)
         return response
+
+    def update_sg(self):
+        response = dict()
+        name = self.params.get("name")
+        folder_id = self.params.get("folder_id")
+        security_groups = self.params.get("security_groups")
+        instance = self._get_instance(name, folder_id)
+        protobuf_field_mask = FieldMask(paths=["security_group_ids"])
+        if instance:
+            operation = self.active_op_limit_timeout(
+                self.params.get("active_operations_limit_timeout"),
+                self.instance_service.UpdateNetworkInterface,
+                UpdateInstanceNetworkInterfaceRequest(
+                    instance_id=instance["id"],
+                    network_interface_index = "0",
+                    update_mask=protobuf_field_mask,
+                    security_group_ids=security_groups,
+                ),
+            )
+            cloud_response = self.waiter(operation)
+            response["response"] = MessageToDict(cloud_response)
+            response = response_error_check(response)
+        else:
+            response["msg"] = "Update instance is missing"
+            response = response_error_check(response)
+        return response        
 
     def start_vm(self):
         response = dict()
@@ -968,7 +1004,7 @@ def _get_resource_spec(memory, cores, core_fraction):
     return ResourcesSpec(memory=memory, cores=cores, core_fraction=core_fraction)
 
 
-def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip, fqdn):
+def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip, fqdn, security_groups):
 
     dns_record_specs = [DnsRecordSpec(fqdn=fqdn, ptr=True)] if fqdn else None
     net_spec = [
@@ -978,12 +1014,13 @@ def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip,
                 address=assign_internal_ip,
                 dns_record_specs=dns_record_specs,
             ),
+            security_group_ids=security_groups,
         )
     ]
     if assign_public_ip:
         net_spec[0].primary_v4_address_spec.one_to_one_nat_spec.CopyFrom(
             OneToOneNatSpec(ip_version=IPV4)
-        )
+        )    
     return net_spec
 
 
