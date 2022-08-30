@@ -1020,7 +1020,7 @@ def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip,
     if assign_public_ip:
         net_spec[0].primary_v4_address_spec.one_to_one_nat_spec.CopyFrom(
             OneToOneNatSpec(ip_version=IPV4)
-        )    
+        )
     return net_spec
 
 
