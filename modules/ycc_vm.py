@@ -404,7 +404,7 @@ class YccVM(YC):
                     msg=f'bad name {self.params["name"]}, see Yandex Cloud requirements for name'
                 )
         if self.params.get("hostname"):
-            if not re.match("^[a-z][a-z0-9-]{1,61}[a-z0-9]$", self.params["hostname"]):
+            if not re.match("^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$", self.params["hostname"]):
                 self.fail_json(
                     msg=f'bad hostname {self.params["hostname"]}, see Yandex Cloud requirements for hostname'
                 )
