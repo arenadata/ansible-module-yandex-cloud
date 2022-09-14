@@ -206,7 +206,6 @@ options:
             - stop
             - get_info
             - update
-            - update_sg
         required: false
     max_retries:
         description:
@@ -289,7 +288,7 @@ message:
 """
 
 VMS_STATES = ["present", "absent"]
-VMS_OPERATIONS = ["start", "stop", "get_info", "update", "update_sg"]
+VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
 PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake"]
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
@@ -733,7 +732,6 @@ class YccVM(YC):
             "stop": self.stop_vm,
             "get_info": self.get_info,
             "update": self.update_vm,
-            "update_sg": self.update_sg,
         }
         return sw[self.params.get("operation")]()
 
@@ -826,51 +824,38 @@ class YccVM(YC):
         name = self.params.get("name")
         folder_id = self.params.get("folder_id")
         labels = self.params.get("labels")
+        security_groups = self.params.get("security_groups")
         instance = self._get_instance(name, folder_id)
-        protobuf_field_mask = FieldMask(paths=["labels"])
+        protobuf_field_labels_mask = FieldMask(paths=["labels"])
+        protobuf_field_sg_mask = FieldMask(paths=["security_group_ids"])
         if instance:
-            operation = self.active_op_limit_timeout(
+            update_labels_operation = self.active_op_limit_timeout(
                 self.params.get("active_operations_limit_timeout"),
                 self.instance_service.Update,
                 UpdateInstanceRequest(
                     instance_id=instance["id"],
                     labels=labels,
-                    update_mask=protobuf_field_mask,
-                ),
+                    update_mask=protobuf_field_labels_mask,
+                ),    
             )
-            cloud_response = self.waiter(operation)
-            response["response"] = MessageToDict(cloud_response)
-            response = response_error_check(response)
-        else:
-            response["msg"] = "Update instance is missing"
-            response = response_error_check(response)
-        return response
-
-    def update_sg(self):
-        response = dict()
-        name = self.params.get("name")
-        folder_id = self.params.get("folder_id")
-        security_groups = self.params.get("security_groups")
-        instance = self._get_instance(name, folder_id)
-        protobuf_field_mask = FieldMask(paths=["security_group_ids"])
-        if instance:
-            operation = self.active_op_limit_timeout(
+            update_sg_operation = self.active_op_limit_timeout(
                 self.params.get("active_operations_limit_timeout"),
                 self.instance_service.UpdateNetworkInterface,
                 UpdateInstanceNetworkInterfaceRequest(
                     instance_id=instance["id"],
                     network_interface_index = "0",
-                    update_mask=protobuf_field_mask,
+                    update_mask=protobuf_field_sg_mask,
                     security_group_ids=security_groups,
                 ),
             )
-            cloud_response = self.waiter(operation)
-            response["response"] = MessageToDict(cloud_response)
-            response = response_error_check(response)
+            sg_cloud_response = self.waiter(update_sg_operation)
+            labels_cloud_response = self.waiter(update_labels_operation)
+            response["response"] = MessageToDict(sg_cloud_response)
+            response = response_error_check(response)        
         else:
             response["msg"] = "Update instance is missing"
             response = response_error_check(response)
-        return response        
+        return response
 
     def start_vm(self):
         response = dict()
