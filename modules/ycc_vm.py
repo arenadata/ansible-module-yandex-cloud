@@ -288,7 +288,7 @@ message:
 """
 
 VMS_STATES = ["present", "absent"]
-VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
+VMS_OPERATIONS = ["start", "stop", "get_info", "update", "list_instances"]
 PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake"]
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
@@ -732,6 +732,8 @@ class YccVM(YC):
             "stop": self.stop_vm,
             "get_info": self.get_info,
             "update": self.update_vm,
+            "list_instances": self.list_instances,
+            
         }
         return sw[self.params.get("operation")]()
 
@@ -926,6 +928,10 @@ class YccVM(YC):
             response["msg"] = "No instance found"
         return response
 
+    def list_instances(self):
+        folder_id = self.params.get("folder_id")
+        instances = self.instance_service.List(ListInstancesRequest(folder_id=folder_id))
+        return MessageToDict(instances)
 
 class ImageFamilyNotFound(Exception):
     pass
