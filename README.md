@@ -103,10 +103,10 @@ OPTIONS (= is mandatory):
         type: str
 
 - operation
-        stop, start or get_info.
+        stop, start, get_info or get_subnet_info.
         Mutually exclusive with `state'.
         [Default: (null)]
-        choises: start, stop, get_info, update
+        choises: start, stop, get_info, get_subnet_info, update
 
 - platform_id
         Platform id.
@@ -146,6 +146,12 @@ OPTIONS (= is mandatory):
 - subnet_id
         Network id.
         Required with `state=present'
+        [Default: (null)]
+
+- secondary_subnet_id
+        Network id for creation secondary NIC.
+        Please note that such options as assign_public_ip, assign_internal_ip, fqdn does not affect to secondary NIC.
+        The security_groups option will apply to both interfaces.
         [Default: (null)]
 
 = token
@@ -195,6 +201,7 @@ EXAMPLES:
           type: hdd
           size: 100
     subnet_id: b0cccg656k0nixi92a
+    secondary_subnet_id: e2l3dk5nid5fdegfthu4
     assign_public_ip: false
     preemptible: true
     metadata:

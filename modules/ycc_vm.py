@@ -156,6 +156,12 @@ options:
             - Network id.
             - Required with I(state=present)
         required: false
+    secondary_subnet_id:
+        description:
+            - Network id for creation secondary NIC. 
+            - Please note that such options as assign_public_ip, assign_internal_ip, fqdn does not affect to secondary NIC. 
+            - The security_groups option will apply to both interfaces.
+        required: false
     assign_public_ip:
         description:
             - Assign public address.
@@ -199,12 +205,13 @@ options:
         required: false
     operation:
         description:
-            - stop, start or get_info.
+            - stop, start, get_info, get_subnet_info.
             - Mutually exclusive with I(state).
         choises:
             - start
             - stop
             - get_info
+            - get_subnet_info
             - update
         required: false
     max_retries:
@@ -224,7 +231,6 @@ options:
 author:
     - Rotaru Sergey (rsv@arenadata.io)
 """
-
 
 EXAMPLES = """
 - name: Create vm
@@ -288,7 +294,7 @@ message:
 """
 
 VMS_STATES = ["present", "absent"]
-VMS_OPERATIONS = ["start", "stop", "get_info", "update"]
+VMS_OPERATIONS = ["start", "stop", "get_info", "get_subnet_info", "update"]
 PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake"]
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
@@ -315,6 +321,8 @@ from yandex.cloud.compute.v1.disk_service_pb2 import GetDiskRequest
 from yandex.cloud.compute.v1.disk_service_pb2_grpc import DiskServiceStub
 from yandex.cloud.compute.v1.image_service_pb2 import GetImageLatestByFamilyRequest
 from yandex.cloud.compute.v1.image_service_pb2_grpc import ImageServiceStub
+from yandex.cloud.vpc.v1.subnet_service_pb2_grpc import SubnetServiceStub
+from yandex.cloud.vpc.v1.subnet_service_pb2 import GetSubnetRequest
 from yandex.cloud.compute.v1.instance_pb2 import IPV4, SchedulingPolicy
 from yandex.cloud.compute.v1.instance_service_pb2 import (
     AttachedDiskSpec,
@@ -365,6 +373,7 @@ def vm_argument_spec():
         disk_size=dict(type="int", required=False, default=10),
         secondary_disks_spec=dict(type="list", required=False),
         subnet_id=dict(type="str", required=False),
+        secondary_subnet_id=dict(type="str", required=False),
         assign_public_ip=dict(type="bool", required=False, default=False),
         assign_internal_ip=dict(type="str", required=False, default=None),
         preemptible=dict(type="bool", required=False, default=False),
@@ -400,6 +409,7 @@ class YccVM(YC):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.instance_service = self.sdk.client(InstanceServiceStub)
+        self.subnet_service = self.sdk.client(SubnetServiceStub)
         self.disk_service = self.sdk.client(DiskServiceStub)
         self.image_service = self.sdk.client(ImageServiceStub)
         self.snapshot_service = self.sdk.client(SnapshotServiceStub)
@@ -663,6 +673,7 @@ class YccVM(YC):
         disk_size = spec.get("disk_size")
         secondary_disks_spec = spec.get("secondary_disks_spec")
         subnet_id = spec.get("subnet_id")
+        secondary_subnet_id = spec.get("secondary_subnet_id")
         assign_public_ip = spec.get("assign_public_ip")
         assign_internal_ip = spec.get("assign_internal_ip")
         preemptible = spec.get("preemptible")
@@ -687,7 +698,7 @@ class YccVM(YC):
             ),
             network_interface_specs=_get_network_interface_spec(
                 subnet_id, assign_public_ip, assign_internal_ip, fqdn, security_groups
-            ),
+                ) + _get_secondary_network_interface_spec(secondary_subnet_id, security_groups),
         )
 
         if secondary_disks_spec and secondary_disks_spec[0]:
@@ -731,6 +742,7 @@ class YccVM(YC):
             "start": self.start_vm,
             "stop": self.stop_vm,
             "get_info": self.get_info,
+            "get_subnet_info": self.get_subnet_info,
             "update": self.update_vm,
         }
         return sw[self.params.get("operation")]()
@@ -836,7 +848,7 @@ class YccVM(YC):
                     instance_id=instance["id"],
                     labels=labels,
                     update_mask=protobuf_field_labels_mask,
-                ),    
+                ),
             )
             update_sg_operation = self.active_op_limit_timeout(
                 self.params.get("active_operations_limit_timeout"),
@@ -851,7 +863,7 @@ class YccVM(YC):
             sg_cloud_response = self.waiter(update_sg_operation)
             labels_cloud_response = self.waiter(update_labels_operation)
             response["response"] = MessageToDict(sg_cloud_response)
-            response = response_error_check(response)        
+            response = response_error_check(response)
         else:
             response["msg"] = "Update instance is missing"
             response = response_error_check(response)
@@ -924,6 +936,12 @@ class YccVM(YC):
             response["instance"] = instance
         else:
             response["msg"] = "No instance found"
+        return response
+
+    def get_subnet_info(self):
+        response = dict()
+        subnet_id = self.params.get("subnet_id")
+        response["subnet_info"] = MessageToDict(self.subnet_service.Get(GetSubnetRequest(subnet_id=subnet_id)))
         return response
 
 
@@ -1007,6 +1025,20 @@ def _get_network_interface_spec(subnet_id, assign_public_ip, assign_internal_ip,
             OneToOneNatSpec(ip_version=IPV4)
         )
     return net_spec
+
+
+def _get_secondary_network_interface_spec(secondary_subnet_id, security_groups):
+    if secondary_subnet_id is not None:
+        net_sec_spec = [
+            NetworkInterfaceSpec(
+                subnet_id=secondary_subnet_id,
+                primary_v4_address_spec=PrimaryAddressSpec(),
+                security_group_ids=security_groups,
+            )
+        ]
+    else:
+        net_sec_spec = []
+    return net_sec_spec
 
 
 def _get_scheduling_policy(preemptible):
