@@ -131,6 +131,12 @@ options:
             - Required with I(state=present), mutually exclusive with I(image_family)
         type: str
         required: false
+    disk_name:
+        description:
+            - Boot disk name.
+            - Useful for Grafana dashboards
+        type: str
+        required: false
     disk_type:
         description:
             - Primary disk type.
@@ -255,6 +261,7 @@ EXAMPLES = """
           type: nvme
           size: 10
         - autodelete: false
+          name: data-disk-2
           description: disk2
           type: hdd
           size: 100
@@ -371,6 +378,7 @@ def vm_argument_spec():
         snapshot_id=dict(type="str", required=False),
         disk_type=dict(choices=DISK_TYPES, required=False, default="hdd"),
         disk_size=dict(type="int", required=False, default=10),
+        disk_name=dict(type="str", required=False),
         secondary_disks_spec=dict(type="list", required=False),
         subnet_id=dict(type="str", required=False),
         secondary_subnet_id=dict(type="str", required=False),
@@ -680,6 +688,7 @@ class YccVM(YC):
         metadata = spec.get("metadata")
         labels = spec.get("labels")
         security_groups = spec.get("security_groups")
+        disk_name = spec.get("disk_name")  # CST-965: added disk_name parameter to boot disk for Grafana dashboards
 
         if snapshot_id:
             try:
@@ -694,7 +703,7 @@ class YccVM(YC):
             zone_id=zone_id,
             platform_id=platform_id,
             boot_disk_spec=_get_attached_disk_spec(
-                disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id
+                disk_name, disk_type, disk_size, snapshot_id=snapshot_id, image_id=image_id
             ),
             network_interface_specs=_get_network_interface_spec(
                 subnet_id, assign_public_ip, assign_internal_ip, fqdn, security_groups
@@ -966,19 +975,19 @@ def _camel(snake_case):
     return "".join([first.lower(), *map(str.title, others)])
 
 
-def _get_attached_disk_spec(disk_type, disk_size, image_id=None, snapshot_id=None):
+def _get_attached_disk_spec(disk_name, disk_type, disk_size, image_id=None, snapshot_id=None):
     return (
         AttachedDiskSpec(
             auto_delete=True,
             disk_spec=AttachedDiskSpec.DiskSpec(
-                type_id=disk_type, size=disk_size, image_id=image_id
+                name=disk_name, type_id=disk_type, size=disk_size, image_id=image_id
             ),
         )
         if image_id
         else AttachedDiskSpec(
             auto_delete=True,
             disk_spec=AttachedDiskSpec.DiskSpec(
-                type_id=disk_type, size=disk_size, snapshot_id=snapshot_id
+                name=disk_name, type_id=disk_type, size=disk_size, snapshot_id=snapshot_id
             ),
         )
     )
@@ -990,6 +999,7 @@ def _get_secondary_disk_specs(secondary_disks):
             lambda disk: AttachedDiskSpec(
                 auto_delete=disk.get("autodelete", True),
                 disk_spec=AttachedDiskSpec.DiskSpec(
+                    name=disk.get("name", ""),
                     description=disk.get("description"),
                     type_id=disk.get("type"),
                     size=disk.get("size"),
