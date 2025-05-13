@@ -572,9 +572,9 @@ class YccVM(YC):
         err.extend(self._compare_disk(instance["bootDisk"]["diskId"], boot_disk_spec))
 
         if spec.get("secondary_disks_spec") and not instance.get("secondaryDisks"):
-            err.extend("secondary_disk not presented on instance")
+            err.append("secondary_disk not presented on instance")
         elif not spec.get("secondary_disks_spec") and instance.get("secondaryDisks"):
-            err.extend(
+            err.append(
                 "secondary_disk presented on instance but not described in module call"
             )
         elif spec.get("secondary_disks_spec") and instance.get("secondaryDisks"):
@@ -804,7 +804,7 @@ class YccVM(YC):
                 response["failed"] = True
                 response["msg"] = (
                     "Instance already exits and %s"
-                    " request params are different" % ", ".join(compare_result)
+                    " request params are different" % ", ".join(map(str, compare_result))
                 )
             else:
                 response["response"] = instance
