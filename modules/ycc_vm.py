@@ -804,7 +804,7 @@ class YccVM(YC):
                 response["failed"] = True
                 response["msg"] = (
                     "Instance already exits and %s"
-                    " request params are different" % ", ".join(compare_result)
+                    " request params are different" % ", ".join(map(str, compare_result))
                 )
             else:
                 response["response"] = instance
