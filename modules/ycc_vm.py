@@ -302,7 +302,7 @@ message:
 
 VMS_STATES = ["present", "absent"]
 VMS_OPERATIONS = ["start", "stop", "get_info", "get_subnet_info", "update"]
-PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake"]
+PLATFORM_IDS = ["Intel Cascade Lake", "Intel Broadwell", "Intel Ice Lake", "AMD Zen 3", "AMD Zen 4"]
 CORE_FRACTIONS = [5, 20, 50, 100]
 DISK_TYPES = ["hdd", "ssd", "ssd-nonreplicated"]
 
@@ -962,6 +962,8 @@ class PlatformId(Enum):
     IntelBroadwell = "standard-v1"
     IntelCascadeLake = "standard-v2"
     IntelIceLake = "standard-v3"
+    AMDZen3 = "standard-v4"
+    AMDZen4 = "standard-v4a"
 
 
 class DiskType(Enum):
