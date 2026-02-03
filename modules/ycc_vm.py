@@ -962,7 +962,7 @@ class PlatformId(Enum):
     IntelBroadwell = "standard-v1"
     IntelCascadeLake = "standard-v2"
     IntelIceLake = "standard-v3"
-    AMDZen3 = "standard-v4"
+    AMDZen3 = "amd-v1"
     AMDZen4 = "standard-v4a"
 
 
