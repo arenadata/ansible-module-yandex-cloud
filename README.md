@@ -111,7 +111,7 @@ OPTIONS (= is mandatory):
 - platform_id
         Platform id.
         [Default: Intel Broadwell.]
-        choises: Intel Cascade Lake, Intel Broadwell
+        choises: Intel Cascade Lake, Intel Broadwell, AMD Zen 3, AMD Zen 4
         type: str
 
 - preemptible
