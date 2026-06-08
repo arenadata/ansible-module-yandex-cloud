@@ -19,8 +19,8 @@ from yandexcloud import SDK, RetryInterceptor
 def yc_argument_spec():
     return dict(
         auth=dict(type='dict', options=dict(
-            token=dict(type="str", required=False, default=None),
-            service_account_key=dict(type="dict", required=False, default=None),
+            token=dict(type="str", required=False, default=None, no_log=True),
+            service_account_key=dict(type="dict", required=False, default=None, no_log=True),
             endpoint=dict(type="str", required=False, default='api.cloud.yandex.net'),
             root_certificates=dict(type="str", required=False, default=None))))
 
