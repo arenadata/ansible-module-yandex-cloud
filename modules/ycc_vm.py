@@ -510,7 +510,7 @@ class YccVM(YC):
         if str(disk_spec["size"]) != disk["size"]:
             err.append("size")
 
-        if disk_spec.get("image_id") and disk_spec["image_id"] != disk["sourceImageId"]:
+        if disk_spec.get("image_id") and disk.get("sourceImageId") and disk_spec["image_id"] != disk["sourceImageId"]:
             err.append("image_id")
 
         return err
