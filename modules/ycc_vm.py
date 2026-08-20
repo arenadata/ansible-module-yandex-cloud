@@ -122,6 +122,7 @@ options:
         description:
             - Folders to search images by its family besides from
             - standard and target folders
+            - Skips folders that users do not have access to
         type: list
         required: false
     image_id:
@@ -653,10 +654,11 @@ class YccVM(YC):
                 ).id
                 break
             except _InactiveRpcError as err:
-                if (
-                    err._state.code  # pylint: disable=protected-access
-                    is not StatusCode.NOT_FOUND
-                ):
+                err_code = err.code()
+                # if PERMISSION_DENIED returned try other folders
+                if err_code == StatusCode.PERMISSION_DENIED:
+                    self.warn(err.details())
+                elif err_code != StatusCode.NOT_FOUND:
                     raise err
         else:
             raise ImageFamilyNotFound
