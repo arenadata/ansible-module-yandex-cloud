@@ -200,6 +200,26 @@ options:
             - Vm security group list
         type: list
         required: false        
+    host_group_id:
+        description:
+            - Dedicated Host Group id to attach the vm to (yc.hostGroupId placement rule).
+            - Can be combined with I(host_id) (the cloud OR-s the rules together).
+        type: str
+        required: false
+    host_id:
+        description:
+            - Dedicated Host id to pin the vm to (yc.hostId placement rule).
+            - Can be combined with I(host_group_id).
+        type: str
+        required: false
+    local_disks_spec:
+        description:
+            - Local (NVMe) disk specs for a vm placed on a dedicated host.
+            - Only I(size) is supported, in bytes, and it must match the dedicated
+              host type's local disk size exactly (see C(yc compute host-type list)).
+            - Requires I(host_group_id) or I(host_id) to be set.
+        type: list
+        required: false
     state:
         description:
             - VM state.
@@ -330,9 +350,10 @@ from yandex.cloud.compute.v1.image_service_pb2 import GetImageLatestByFamilyRequ
 from yandex.cloud.compute.v1.image_service_pb2_grpc import ImageServiceStub
 from yandex.cloud.vpc.v1.subnet_service_pb2_grpc import SubnetServiceStub
 from yandex.cloud.vpc.v1.subnet_service_pb2 import GetSubnetRequest
-from yandex.cloud.compute.v1.instance_pb2 import IPV4, SchedulingPolicy
+from yandex.cloud.compute.v1.instance_pb2 import IPV4, PlacementPolicy, SchedulingPolicy
 from yandex.cloud.compute.v1.instance_service_pb2 import (
     AttachedDiskSpec,
+    AttachedLocalDiskSpec,
     CreateInstanceRequest,
     DeleteInstanceRequest,
     DnsRecordSpec,
@@ -388,6 +409,9 @@ def vm_argument_spec():
         metadata=dict(type="dict", required=False),
         labels=dict(type="dict", required=False),
         security_groups=dict(type="list", required=False),
+        host_group_id=dict(type="str", required=False, default=None),
+        host_id=dict(type="str", required=False, default=None),
+        local_disks_spec=dict(type="list", required=False),
         state=dict(choices=VMS_STATES, required=False),
         operation=dict(choices=VMS_OPERATIONS, required=False),
     )
@@ -689,6 +713,9 @@ class YccVM(YC):
         labels = spec.get("labels")
         security_groups = spec.get("security_groups")
         disk_name = spec.get("disk_name")  # CST-965: added disk_name parameter to boot disk for Grafana dashboards
+        host_group_id = spec.get("host_group_id")
+        host_id = spec.get("host_id")
+        local_disks_spec = spec.get("local_disks_spec")
 
         if snapshot_id:
             try:
@@ -722,6 +749,11 @@ class YccVM(YC):
             params["metadata"] = metadata
         if labels:
             params["labels"] = labels
+        placement_policy = _get_placement_policy(host_group_id, host_id)
+        if placement_policy:
+            params["placement_policy"] = placement_policy
+        if local_disks_spec:
+            params["local_disk_specs"] = _get_local_disk_specs(local_disks_spec)
 
         if login and public_ssh_key:
             params["metadata"] = {
@@ -1055,6 +1087,31 @@ def _get_secondary_network_interface_spec(secondary_subnet_id, security_groups):
 
 def _get_scheduling_policy(preemptible):
     return SchedulingPolicy(preemptible=preemptible)
+
+
+def _get_placement_policy(host_group_id, host_id):
+    rules = []
+    if host_group_id:
+        rules.append(
+            PlacementPolicy.HostAffinityRule(
+                key="yc.hostGroupId",
+                op=PlacementPolicy.HostAffinityRule.Operator.IN,
+                values=[host_group_id],
+            )
+        )
+    if host_id:
+        rules.append(
+            PlacementPolicy.HostAffinityRule(
+                key="yc.hostId",
+                op=PlacementPolicy.HostAffinityRule.Operator.IN,
+                values=[host_id],
+            )
+        )
+    return PlacementPolicy(host_affinity_rules=rules) if rules else None
+
+
+def _get_local_disk_specs(local_disks_spec):
+    return [AttachedLocalDiskSpec(size=disk["size"]) for disk in local_disks_spec]
 
 
 def main():

@@ -69,6 +69,18 @@ OPTIONS (= is mandatory):
         [Default: (null)]
         type: str
 
+- host_group_id
+        Dedicated Host Group id to attach the vm to (yc.hostGroupId placement rule).
+        Can be combined with `host_id' (the cloud OR-s the rules together).
+        [Default: (null)]
+        type: str
+
+- host_id
+        Dedicated Host id to pin the vm to (yc.hostId placement rule).
+        Can be combined with `host_group_id'.
+        [Default: (null)]
+        type: str
+
 - image_id
         Boot image id.
         Required with `state=present'.
@@ -81,6 +93,14 @@ OPTIONS (= is mandatory):
         Required with `state=present', mutually exclusive with `metadata'.
         [Default: (null)]
         type: str
+
+- local_disks_spec
+        Local (NVMe) disk specs for a vm placed on a dedicated host.
+        Only `size' is supported, in bytes, and it must match the dedicated host
+        type's local disk size exactly (see `yc compute host-type list').
+        Requires `host_group_id' or `host_id' to be set.
+        [Default: (null)]
+        type: list
 
 - max_retries
         Max retries to proceed operation/state.
@@ -204,6 +224,9 @@ EXAMPLES:
     secondary_subnet_id: e2l3dk5nid5fdegfthu4
     assign_public_ip: false
     preemptible: true
+    host_group_id: abcdefg1hi23xxxxxxxx
+    local_disks_spec:
+        - size: 3198924357632
     metadata:
         user-data: "cloud init format in str"
     state: present
